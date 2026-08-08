@@ -17,12 +17,8 @@ STAGES = {"夏窗", "季前备战", "上半程", "冬窗", "下半程", "赛季�
 
 
 @pytest.fixture
-def client():
-    # 注意：conftest 的 autouse fixture 已把 config_path 指向隔离的 tmp_path
-    app.state.narrator = None
-    app.state.player = None
-    app.state.world = None
-    app.state.game = None
+def client(isolated_app_state):
+    """依赖隔离 fixture（保证其先执行，config 写入 tmp 而非真实 config.json）。"""
     c = TestClient(app)
     c.post("/api/setup/config", json={"api_key": "sk-test", "base_url": "https://x", "model": "m"})
     return c

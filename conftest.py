@@ -34,11 +34,13 @@ _install_engine_stubs()
 
 @pytest.fixture(autouse=True)
 def isolated_app_state(tmp_path):
-    """每个测试独立配置与状态。"""
+    """每个测试独立配置与状态；结束后恢复原 config_path（防止污染真实 config.json）。"""
     from app.main import app
+    original_path = app.state.config_path
     app.state.config_path = str(tmp_path / "config.json")
     app.state.narrator = None
     app.state.player = None
     app.state.world = None
     app.state.game = None
     yield
+    app.state.config_path = original_path
