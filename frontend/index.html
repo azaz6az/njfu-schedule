@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>足球人生模拟器</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <!-- 设置页：未配置 API Key 时显示（后端 403 或 status.configured=false） -->
+  <section id="setup" class="screen hidden">
+    <h1>⚽ 足球人生模拟器</h1>
+    <p class="sub">需要配置 AI 叙事 API（OpenAI 兼容接口）才能开始游玩</p>
+    <div class="card">
+      <label>API Key <input id="cfg_key" type="password" placeholder="sk-..." autocomplete="off"></label>
+      <label>Base URL <input id="cfg_base" value="https://api.deepseek.com" placeholder="https://api.deepseek.com"></label>
+      <label>模型 <input id="cfg_model" value="deepseek-chat" placeholder="deepseek-chat"></label>
+      <button onclick="saveConfig()">保存并开始</button>
+      <p id="cfg_msg" class="msg"></p>
+    </div>
+  </section>
+
+  <!-- 建档页 -->
+  <section id="create" class="screen hidden">
+    <h1>🏟️ 建立你的球员档案</h1>
+    <div class="card grid2">
+      <label>姓名 <input id="p_name" placeholder="例如：张伟"></label>
+      <label>出生地区 <input id="p_region" placeholder="例如：山东"></label>
+      <label>身高(cm) <input id="p_height" type="number" min="140" max="210" value="178"></label>
+      <label>体重(kg) <input id="p_weight" type="number" min="40" max="120" value="70"></label>
+      <label>惯用脚
+        <select id="p_foot">
+          <option value="右">右</option>
+          <option value="左">左</option>
+        </select>
+      </label>
+      <label>位置
+        <select id="p_position">
+          <option value="ST">ST 中锋</option>
+          <option value="LW">LW 左边锋</option>
+          <option value="RW">RW 右边锋</option>
+          <option value="CAM">CAM 前腰</option>
+          <option value="CM">CM 中场</option>
+          <option value="CDM">CDM 后腰</option>
+          <option value="LB">LB 左后卫</option>
+          <option value="RB">RB 右后卫</option>
+          <option value="CB">CB 中后卫</option>
+          <option value="GK">GK 门将</option>
+        </select>
+      </label>
+      <label class="full">青训机构
+        <select id="p_academy">
+          <option>山东鲁能足校</option>
+          <option>广州恒大足校</option>
+          <option>上海根宝基地</option>
+          <option>浙江绿城足校</option>
+          <option>北京国安青训</option>
+          <option>万达留洋计划</option>
+        </select>
+      </label>
+      <button class="full" onclick="createGame()">⚽ 开启职业生涯</button>
+    </div>
+  </section>
+
+  <!-- 主界面 -->
+  <section id="game" class="screen hidden">
+    <header>
+      <h1 id="g_name"></h1>
+      <div class="ovr-box"><span id="g_ovr"></span><small>OVR</small></div>
+      <div class="value-box">身价 <span id="g_value"></span></div>
+    </header>
+    <div class="layout">
+      <main id="story"></main>
+      <aside>
+        <div class="card" id="radar"></div>
+        <div class="card">
+          <h3>生涯数据</h3>
+          <pre id="g_stats"></pre>
+        </div>
+      </aside>
+    </div>
+  </section>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
