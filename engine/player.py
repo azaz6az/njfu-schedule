@@ -56,11 +56,12 @@ def initial_attributes(position, seed=0):
     attrs = {}
     for a in ALL_FIELD:
         attrs[a] = clamp_attr(rng.randint(48, 62))
+    # 先初始化 GK 专属属性（GK 位置的核心提升会作用到它们）
+    for g in GK_ATTRIBUTES:
+        attrs[g] = clamp_attr(rng.randint(40, 50) if position != "GK" else rng.randint(55, 70))
     core = list(POSITION_WEIGHTS.get(position, POSITION_WEIGHTS["CM"]).keys())
     for a in core:
         attrs[a] = clamp_attr(attrs[a] + rng.randint(4, 10))
-    for g in GK_ATTRIBUTES:
-        attrs[g] = clamp_attr(rng.randint(40, 50) if position != "GK" else rng.randint(55, 70))
     return attrs
 
 

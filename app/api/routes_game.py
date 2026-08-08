@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from engine.attributes import calc_ovr
-from engine.decision import next_decision
+from engine.season import advance_stage, next_skeleton
 from engine.development import apply_decision_effects
 from engine.player import ACADEMIES, create_player
 from engine.save import save_state
@@ -90,6 +90,7 @@ async def new_game(data: NewGameIn, request: Request):
         raise HTTPException(400, "青训机构不合法")
     p = create_player(data.name, data.birth_year, data.position, data.foot,
                       data.height, data.weight, data.region, data.academy)
+    p["league"] = "cs"  # 青训起点：中超体系
     p["ovr"] = calc_ovr(p["attributes"], p["position"])
     p["value"] = market_value(p["ovr"], p["age"], p["position"], "cs", 0, 1.0)
     p["ovr"], p["value"] = apply_under18_caps(p["ovr"], p["value"], p["age"])
@@ -100,9 +101,10 @@ async def new_game(data: NewGameIn, request: Request):
                 "options": [{"label": "主动向教练报到", "hint": "留下好印象"},
                             {"label": "先熟悉场地", "hint": "低调观察"},
                             {"label": "和新队友攀谈", "hint": "早点融入"}]}
-    request.app.state.game = {"season": 2023, "stage": "青训入营",
+    # 16 岁青训首年：从"上半程"开始（青训没有转会窗），赛季末结算后进入 2024 夏窗
+    request.app.state.game = {"season": 2023, "stage": "上半程", "stage_index": 2,
                               "skeleton_index": 0, "narrative_history": [],
-                              "current_decision": skeleton}
+                              "current_decision": skeleton, "retirement_offered": False}
     result = await _generate(request, skeleton)
     save_state(_full_state(request), SAVE_PATH)
     return {"narrative": result["narrative"], "options": result["options"],
@@ -125,12 +127,40 @@ async def decision(data: DecisionIn, request: Request):
     p["attributes"] = apply_decision_effects(p["attributes"], effects)
     p["morale"] = max(0, min(99, p.get("morale", 70) + effects.get("morale", 0)))
     p["form"] = max(0.5, min(1.5, p.get("form", 1.0) + effects.get("form", 0)))
+    # 转会结算（引擎生成的报价卡）
+    transfer = effects.get("transfer")
+    if transfer:
+        p["club"] = transfer["club"]
+        p["league"] = transfer["league"]
+        p["contract"] = {"years": transfer["years"], "weekly_wage": transfer["weekly_wage"],
+                         "release_clause": transfer["release_clause"],
+                         "signing_bonus": transfer["signing_bonus"]}
+        p["milestones"].append(f"{game['season']}年：转会加盟{transfer['club']}（{transfer['fee'] // 10000}万欧）")
+    # 数值更新
     p["ovr"] = calc_ovr(p["attributes"], p["position"])
-    p["value"] = market_value(p["ovr"], p["age"], p["position"], "cs", 0, p.get("form", 1.0))
+    p["value"] = market_value(p["ovr"], p["age"], p["position"], p.get("league", "cs"),
+                              p.get("contract", {}).get("years", 0), p.get("form", 1.0))
     p["ovr"], p["value"] = apply_under18_caps(p["ovr"], p["value"], p["age"])
-    # 生成下一决策骨架
+    # 退役抉择处理
+    retire_choice = effects.get("retire")
+    if retire_choice:
+        if retire_choice == "retire":
+            save_state(_full_state(request), SAVE_PATH)
+            return {"career_over": True, "ended": "退役",
+                    "honors": p["honors"], "milestones": p["milestones"],
+                    "career_stats": p["career_stats"]}
+        if retire_choice == "coach":
+            from engine.coach import new_coach
+            p["coach_attributes"] = new_coach(p["name"], seed=game["season"])
+            p["flags"] = {"retired": True, "coach_mode": True}
+            save_state(_full_state(request), SAVE_PATH)
+            return {"career_over": True, "ended": "转教练", "coach": p["coach_attributes"],
+                    "honors": p["honors"], "milestones": p["milestones"]}
+        # continue：继续征战，下一赛季末仍可再选
+    # 推进到下一决策点
     game["skeleton_index"] += 1
-    new_sk = next_decision(p, game["season"], "上半程", rng_seed=game["skeleton_index"])
+    advance_stage(game)
+    new_sk = next_skeleton(p, game, request.app.state.world, game["skeleton_index"])
     game["current_decision"] = new_sk
     result = await _generate(request, new_sk)
     save_state(_full_state(request), SAVE_PATH)
@@ -166,6 +196,14 @@ def retire(data: RetireIn, request: Request):
 
 
 def _full_state(request: Request) -> dict:
-    return {"player": request.app.state.player,
-            "world": {"season": request.app.state.game["season"], "leagues": {}},
-            "flags": {"retired": False, "coach_mode": False}}
+    game = request.app.state.game or {"season": 2023, "stage": "", "retirement_offered": False}
+    p = request.app.state.player or {}
+    w = request.app.state.world or {}
+    flags = p.get("flags", {})
+    return {"player": p,
+            "world": {"season": game["season"], "stage": game["stage"],
+                      "leagues": {code: {"name": lg.name, "table": lg.table}
+                                  for code, lg in w.items()}},
+            "flags": {"retired": flags.get("retired", False),
+                      "coach_mode": flags.get("coach_mode", False),
+                      "retirement_offered": game.get("retirement_offered", False)}}
