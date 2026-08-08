@@ -55,20 +55,23 @@ class RetireIn(BaseModel):
 
 
 async def _ask_llm(request: Request, skeleton: dict) -> NarratorOutput:
-    """调用 LLM 并校验 JSON；失败重试 1 次，仍失败返回 502（绝不伪造叙事）。"""
+    """调用 LLM 并校验 JSON；对瞬时错误（409/429/5xx/网络）退避重试 3 次，仍失败返回 502（绝不伪造叙事）。"""
+    import asyncio
     n = request.app.state.narrator
     p = request.app.state.player
     game = request.app.state.game
     summary = {"name": p["name"], "age": p["age"], "ovr": p["ovr"], "value": p["value"],
                "position": p["position"], "club": p["club"], "season": game["season"]}
     last_error = None
-    for _ in range(2):
+    for attempt in range(3):
         try:
             raw = await n.generate(SYSTEM_PROMPT,
                                    build_user_prompt(summary, game["narrative_history"], skeleton))
             return parse_llm_json(raw)
         except (ValueError, httpx.HTTPError) as e:
             last_error = e
+            if attempt < 2:  # 退避重试：409/429/5xx/网络错误多为瞬时
+                await asyncio.sleep(1.0 * (attempt + 1))
     raise HTTPException(502, f"叙事生成失败，请重试（{last_error}）")
 
 

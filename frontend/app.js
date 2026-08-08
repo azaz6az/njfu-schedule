@@ -18,7 +18,10 @@ async function api(path, method = "GET", body = null) {
   }
   if (!r.ok) {
     const data = await r.json().catch(() => null);
-    const e = new Error((data && data.detail) || r.statusText);
+    // 截断后端 detail（可能包含完整 URL 与状态码细节），保留前 120 字便于识别
+    let msg = (data && data.detail) || r.statusText;
+    if (typeof msg === "string" && msg.length > 120) msg = msg.slice(0, 120) + "…";
+    const e = new Error(msg);
     e.status = r.status;
     throw e;
   }
