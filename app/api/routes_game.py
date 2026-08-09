@@ -278,7 +278,7 @@ def _try_restore(request: Request) -> bool:
     request.app.state.player = s["player"]
     request.app.state.world = build_world(os.path.join(BASE_DIR, "data"))
     g = s.get("game") or {}
-    request.app.state.game = {
+    game = {
         "season": g.get("season", 2023),
         "stage": g.get("stage", "上半程"),
         "stage_index": g.get("stage_index", 2),
@@ -287,6 +287,11 @@ def _try_restore(request: Request) -> bool:
         "current_decision": g.get("current_decision"),
         "retirement_offered": g.get("retirement_offered", False),
     }
+    request.app.state.game = game
+    # 旧版存档无待决策状态：按当前赛季/阶段重新生成骨架（保证可继续游玩）
+    if game["current_decision"] is None:
+        game["current_decision"] = next_skeleton(
+            request.app.state.player, game, request.app.state.world, game["skeleton_index"])
     return True
 
 

@@ -214,6 +214,29 @@ def test_game_state(monkeypatch):
     assert r.json()["player"]["name"] == "张伟"
 
 
+def test_restore_generates_missing_decision(monkeypatch):
+    """旧版存档（无 current_decision 字段）恢复后自动生成待决策骨架，游戏可继续。"""
+    import json
+    from app.api.routes_game import SAVE_PATH
+    from engine.player import create_player
+    p = create_player("旧档", 2007, "ST", "右", 180, 70, "山东", "山东鲁能足校")
+    p["league"] = "cs"
+    old_save = {"player": p, "world": {}, "flags": {},
+                "game": {"season": 2024, "stage": "上半程", "stage_index": 2,
+                         "skeleton_index": 5, "narrative_history": [],
+                         "retirement_offered": False}}  # 无 current_decision
+    with open(SAVE_PATH, "w", encoding="utf-8") as f:
+        json.dump(old_save, f, ensure_ascii=False)
+    c = make_client()
+    _configure(c)
+    r = c.get("/api/game/state")
+    assert r.status_code == 200
+    g = r.json()["game"]
+    assert g["current_decision"] is not None, "旧存档应自动生成待决策"
+    assert len(g["current_decision"]["options"]) >= 2
+    assert g["current_decision"]["stage"] == "上半程"
+
+
 def test_retire_before_40(monkeypatch):
     c = make_client()
     _configure(c)

@@ -188,14 +188,17 @@ async function choose(i) {
   }
 }
 
-// 刷新恢复：player 等来自 /api/game/state，叙事/选项来自本地缓存
+// 刷新恢复：player/当前决策来自 /api/game/state（后端可能已重新生成骨架），
+// 叙事文本来自本地缓存；选项以后端骨架为准（数量正确），缓存仅作叙事恢复
 async function refreshState() {
   const s = await api("/api/game/state");
   const saved = loadStory();
+  const cd = (s.game && s.game.current_decision) || null;
   state = {
     player: s.player,
     narrative: saved ? saved.narrative : null,
-    options: saved ? saved.options : null,
+    options: null,           // 下次决策后由 done 事件提供 LLM 文案
+    decision: cd,            // 骨架原文（含 options，数量与后端一致）
   };
 }
 
