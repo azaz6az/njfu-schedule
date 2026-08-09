@@ -33,11 +33,17 @@ _install_engine_stubs()
 
 
 @pytest.fixture(autouse=True)
-def isolated_app_state(tmp_path):
-    """每个测试独立配置与状态；结束后恢复原 config_path（防止污染真实 config.json）。"""
+def isolated_app_state(tmp_path, monkeypatch):
+    """每个测试独立配置与状态；结束后自动恢复（monkeypatch）。
+
+    - config 写入临时目录（不污染真实 config.json）
+    - 存档路径指向临时目录（不污染真实 saves/latest.json）
+    - app 状态清零（避免跨测试串扰）
+    """
     from app.main import app
     original_path = app.state.config_path
     app.state.config_path = str(tmp_path / "config.json")
+    monkeypatch.setattr("app.api.routes_game.SAVE_PATH", str(tmp_path / "latest.json"))
     app.state.narrator = None
     app.state.player = None
     app.state.world = None

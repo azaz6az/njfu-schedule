@@ -23,14 +23,15 @@ STAGE_LABEL = {"夏窗": "夏季转会窗", "季前备战": "季前备战", "上
 RETIREMENT_THRESHOLD = 40
 
 
-def _transfer_skeleton(player: dict, game: dict, rng_seed: int) -> dict:
+def _transfer_skeleton(player: dict, game: dict, world: dict, rng_seed: int) -> dict:
     """转会窗骨架：引擎生成报价卡 → 接受/拒绝选项（防幻觉：报价全部引擎生成）。"""
-    offers = generate_offers(player, rng_seed=rng_seed)
+    offers = generate_offers(player, world=world, rng_seed=rng_seed)
     options = []
     for o in offers:
+        fee_txt = "租借培养" if o["fee"] == 0 else f"{o['fee'] // 10000}万欧"
         options.append({
-            "label": f"接受 {o['club']} 的报价",
-            "hint": f"{o['fee'] // 10000}万欧 / 周薪{o['weekly_wage']}欧 / {o['years']}年",
+            "label": f"接受 {o['club']} 的{'租借' if o['fee'] == 0 else '报价'}",
+            "hint": f"{fee_txt} / 周薪{o['weekly_wage']}欧 / {o['years']}年 / {o['role']}",
             "effects": {"transfer": o, "morale": 3, "reputation": 2},
         })
     options.append({
@@ -96,7 +97,7 @@ def next_skeleton(player: dict, game: dict, world: dict, rng_seed: int) -> dict:
     """按当前 stage 生成下一决策骨架。"""
     stage = game["stage"]
     if stage in ("夏窗", "冬窗"):
-        return _transfer_skeleton(player, game, rng_seed)
+        return _transfer_skeleton(player, game, world, rng_seed)
     if stage == "季前备战":
         return _training_skeleton(player, game)
     if stage == "赛季末":

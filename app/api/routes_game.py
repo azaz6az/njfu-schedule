@@ -1,15 +1,18 @@
-"""游戏路由：建档、决策、状态、退役。"""
+"""游戏路由：建档、决策（SSE 流式）、状态、退役。"""
+import asyncio
+import json
 import os
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from engine.attributes import calc_ovr
 from engine.season import advance_stage, next_skeleton
 from engine.development import apply_decision_effects
 from engine.player import ACADEMIES, create_player
-from engine.save import save_state
+from engine.save import load_state, save_state
 from engine.value import apply_under18_caps, market_value
 from engine.world import build_world
 from app.narrator.prompts import SYSTEM_PROMPT, build_user_prompt
@@ -21,6 +24,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 SAVE_PATH = os.path.join(BASE_DIR, "saves", "latest.json")
 
 POSITIONS = ("ST", "LW", "RW", "CAM", "CM", "CDM", "LB", "RB", "CB", "GK")
+POSITION_CHANGEABLE = ("ST", "LW", "RW", "CAM", "CM", "CDM", "LB", "RB", "CB")
 
 
 def _require_narrator(request: Request):
@@ -54,34 +58,64 @@ class RetireIn(BaseModel):
     choice: str  # retire | continue | coach
 
 
-async def _ask_llm(request: Request, skeleton: dict) -> NarratorOutput:
-    """调用 LLM 并校验 JSON；对瞬时错误（409/429/5xx/网络）退避重试 3 次，仍失败返回 502（绝不伪造叙事）。"""
-    import asyncio
+def _merge_options(skeleton: dict, llm_out: NarratorOutput | None) -> list:
+    """LLM 文案按索引合并到骨架选项；数量以引擎骨架为准（修复选项错位报错）。
+
+    骨架 3 个选项时，LLM 即使只输出 2 个/输出 4 个，前端按钮始终与骨架对齐。
+    """
+    sk_opts = skeleton["options"]
+    llm_opts = list(llm_out.options) if llm_out else []
+    merged = []
+    for i, sk in enumerate(sk_opts):
+        if i < len(llm_opts):
+            merged.append({"label": llm_opts[i].label, "hint": llm_opts[i].hint})
+        else:
+            merged.append({"label": sk["label"], "hint": sk["hint"]})
+    return merged
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _player_summary(request: Request) -> dict:
+    p = request.app.state.player
+    game = request.app.state.game
+    return {"name": p["name"], "age": p["age"], "ovr": p["ovr"], "value": p["value"],
+            "position": p["position"], "club": p["club"], "season": game["season"]}
+
+
+async def _stream_narrative(request: Request, skeleton: dict):
+    """流式叙事生成（3 次重试，仅对连接阶段失败重试）。
+
+    产出叙事增量文本；结束时更新历史摘要。LLM 输出不合规时抛 HTTPException(502)。
+    调用方自行收集增量并 parse_llm_json（async generator 无法带值 return）。
+    """
     n = request.app.state.narrator
     p = request.app.state.player
     game = request.app.state.game
-    summary = {"name": p["name"], "age": p["age"], "ovr": p["ovr"], "value": p["value"],
-               "position": p["position"], "club": p["club"], "season": game["season"]}
-    last_error = None
+    prompt = build_user_prompt(_player_summary(request), game["narrative_history"], skeleton)
+    last_err = None
     for attempt in range(3):
+        parts = []
         try:
-            raw = await n.generate(SYSTEM_PROMPT,
-                                   build_user_prompt(summary, game["narrative_history"], skeleton))
-            return parse_llm_json(raw)
-        except (ValueError, httpx.HTTPError) as e:
-            last_error = e
-            if attempt < 2:  # 退避重试：409/429/5xx/网络错误多为瞬时
+            async for delta in n.generate_stream(SYSTEM_PROMPT, prompt):
+                parts.append(delta)
+                yield delta
+            raw = "".join(parts)
+            out = parse_llm_json(raw)
+            game["narrative_history"].append(out.narrative[:120])
+            game["narrative_history"] = game["narrative_history"][-10:]
+            return
+        except httpx.HTTPError as e:
+            last_err = e
+            if attempt < 2:
                 await asyncio.sleep(1.0 * (attempt + 1))
-    raise HTTPException(502, f"叙事生成失败，请重试（{last_error}）")
-
-
-async def _generate(request: Request, skeleton: dict) -> dict:
-    out = await _ask_llm(request, skeleton)
-    game = request.app.state.game
-    game["narrative_history"].append(out.narrative[:120])
-    game["narrative_history"] = game["narrative_history"][-10:]
-    return {"narrative": out.narrative,
-            "options": [o.model_dump() for o in out.options]}
+                continue
+        except ValueError as e:
+            last_err = e
+            break  # JSON 不合规：流已发完，无法重试
+    raise HTTPException(502, f"叙事生成失败，请重试（{last_err}）")
 
 
 @router.post("/new")
@@ -108,10 +142,25 @@ async def new_game(data: NewGameIn, request: Request):
     request.app.state.game = {"season": 2023, "stage": "上半程", "stage_index": 2,
                               "skeleton_index": 0, "narrative_history": [],
                               "current_decision": skeleton, "retirement_offered": False}
-    result = await _generate(request, skeleton)
+    # 开局叙事（非流式，仅一次；带重试）
+    out = None
+    last_err = None
+    for attempt in range(3):
+        try:
+            raw = await request.app.state.narrator.generate(
+                SYSTEM_PROMPT, build_user_prompt(_player_summary(request), [], skeleton))
+            out = parse_llm_json(raw)
+            break
+        except (ValueError, httpx.HTTPError) as e:
+            last_err = e
+            if attempt < 2:
+                await asyncio.sleep(1.0 * (attempt + 1))
+    if out is None:
+        raise HTTPException(502, f"开局叙事生成失败，请重试（{last_err}）")
+    options = _merge_options(skeleton, out)
     save_state(_full_state(request), SAVE_PATH)
-    return {"narrative": result["narrative"], "options": result["options"],
-            "player": p, "decision": skeleton}
+    return {"narrative": out.narrative, "options": options, "player": p,
+            "decision": {k: v for k, v in skeleton.items() if k != "options"}}
 
 
 @router.post("/decision")
@@ -126,7 +175,8 @@ async def decision(data: DecisionIn, request: Request):
     choice = skeleton["options"][data.choice_id]
     effects = choice.get("effects", {})  # 入营等文案骨架无引擎效果
     p = request.app.state.player
-    # 引擎结算（防幻觉：数值效果全部来自引擎预生成的 effects）
+
+    # ---- 引擎结算（防幻觉：数值效果全部来自引擎预生成的 effects）----
     p["attributes"] = apply_decision_effects(p["attributes"], effects)
     p["morale"] = max(0, min(99, p.get("morale", 70) + effects.get("morale", 0)))
     p["form"] = max(0.5, min(1.5, p.get("form", 1.0) + effects.get("form", 0)))
@@ -140,7 +190,7 @@ async def decision(data: DecisionIn, request: Request):
         p["milestones"].append(f"{game['season']}年：伤愈复出")
     # 位置转型：引擎预定义目标，真正改变位置并重算 OVR
     pos_change = effects.get("position_change")
-    if pos_change and pos_change in ("ST", "LW", "RW", "CAM", "CM", "CDM", "LB", "RB", "CB"):
+    if pos_change and pos_change in POSITION_CHANGEABLE:
         p["position"] = pos_change
         p["milestones"].append(f"{game['season']}年：位置转型为{pos_change}")
     # 转会结算（引擎生成的报价卡）
@@ -157,39 +207,87 @@ async def decision(data: DecisionIn, request: Request):
     p["value"] = market_value(p["ovr"], p["age"], p["position"], p.get("league", "cs"),
                               p.get("contract", {}).get("years", 0), p.get("form", 1.0))
     p["ovr"], p["value"] = apply_under18_caps(p["ovr"], p["value"], p["age"])
-    # 退役抉择处理
+
+    # 退役抉择：不走 LLM，直接返回结局
     retire_choice = effects.get("retire")
     if retire_choice:
-        if retire_choice == "retire":
-            save_state(_full_state(request), SAVE_PATH)
-            return {"career_over": True, "ended": "退役",
-                    "honors": p["honors"], "milestones": p["milestones"],
-                    "career_stats": p["career_stats"]}
         if retire_choice == "coach":
             from engine.coach import new_coach
             p["coach_attributes"] = new_coach(p["name"], seed=game["season"])
             p["flags"] = {"retired": True, "coach_mode": True}
-            save_state(_full_state(request), SAVE_PATH)
-            return {"career_over": True, "ended": "转教练", "coach": p["coach_attributes"],
-                    "honors": p["honors"], "milestones": p["milestones"]}
-        # continue：继续征战，下一赛季末仍可再选
-    # 推进到下一决策点
+            outcome = {"career_over": True, "ended": "转教练", "coach": p["coach_attributes"],
+                       "honors": p["honors"], "milestones": p["milestones"]}
+        else:  # retire（退役）
+            outcome = {"career_over": True, "ended": "退役",
+                       "honors": p["honors"], "milestones": p["milestones"],
+                       "career_stats": p["career_stats"]}
+
+        async def retire_stream():
+            yield _sse("meta", {"player": p, **outcome})
+            yield _sse("done", {})
+        save_state(_full_state(request), SAVE_PATH)
+        return StreamingResponse(retire_stream(), media_type="text/event-stream")
+
+    # ---- 推进到下一决策点并生成骨架 ----
     game["skeleton_index"] += 1
     advance_stage(game)
     new_sk = next_skeleton(p, game, request.app.state.world, game["skeleton_index"])
     game["current_decision"] = new_sk
-    result = await _generate(request, new_sk)
-    save_state(_full_state(request), SAVE_PATH)
-    return {"narrative": result["narrative"], "options": result["options"],
-            "player": p,
-            "decision": {k: v for k, v in new_sk.items() if k != "options"}}
+
+    async def event_stream():
+        yield _sse("meta", {"player": p, "decision_type": new_sk["type"],
+                            "stage": game["stage"], "season": game["season"]})
+        try:
+            full_text = []
+            async for delta in _stream_narrative(request, new_sk):
+                full_text.append(delta)
+                yield _sse("narrative", {"delta": delta})
+            raw = "".join(full_text)
+            out = parse_llm_json(raw)
+        except HTTPException as e:
+            yield _sse("error", {"detail": e.detail})
+            return
+        # 选项合并：数量以引擎骨架为准
+        options = _merge_options(new_sk, out)
+        save_state(_full_state(request), SAVE_PATH)
+        yield _sse("done", {"options": options, "narrative": out.narrative,
+                            "decision": {k: v for k, v in new_sk.items() if k != "options"},
+                            "player": p})
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @router.get("/state")
 def state(request: Request):
     if request.app.state.player is None:
-        raise HTTPException(404, "尚未建档")
+        if not _try_restore(request):
+            raise HTTPException(404, "尚未建档")
     return _full_state(request)
+
+
+def _try_restore(request: Request) -> bool:
+    """服务重启/刷新后从存档恢复内存状态（player/world/game）。"""
+    if not os.path.exists(SAVE_PATH):
+        return False
+    try:
+        s = load_state(SAVE_PATH)
+    except Exception:
+        return False
+    if not s.get("player"):
+        return False
+    request.app.state.player = s["player"]
+    request.app.state.world = build_world(os.path.join(BASE_DIR, "data"))
+    g = s.get("game") or {}
+    request.app.state.game = {
+        "season": g.get("season", 2023),
+        "stage": g.get("stage", "上半程"),
+        "stage_index": g.get("stage_index", 2),
+        "skeleton_index": g.get("skeleton_index", 0),
+        "narrative_history": g.get("narrative_history", []),
+        "current_decision": g.get("current_decision"),
+        "retirement_offered": g.get("retirement_offered", False),
+    }
+    return True
 
 
 @router.post("/retire")
@@ -222,4 +320,10 @@ def _full_state(request: Request) -> dict:
                                   for code, lg in w.items()}},
             "flags": {"retired": flags.get("retired", False),
                       "coach_mode": flags.get("coach_mode", False),
-                      "retirement_offered": game.get("retirement_offered", False)}}
+                      "retirement_offered": game.get("retirement_offered", False)},
+            "game": {"season": game["season"], "stage": game["stage"],
+                     "stage_index": game.get("stage_index", 0),
+                     "skeleton_index": game.get("skeleton_index", 0),
+                     "narrative_history": game.get("narrative_history", []),
+                     "current_decision": game.get("current_decision"),
+                     "retirement_offered": game.get("retirement_offered", False)}}

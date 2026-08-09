@@ -54,36 +54,73 @@ LEAGUE_POOL = {
 }
 
 
-def generate_offers(player: dict, window: str = "summer", rng_seed: int = 0) -> list:
-    """按球员 OVR/年龄/身价生成 0-3 张报价卡。
+def generate_offers(player: dict, world: dict = None, window: str = "summer",
+                    rng_seed: int = 0) -> list:
+    """按球员实力生成 0-4 张报价卡；买家从世界球队池按实力档次匹配（v2）。
 
-    - ovr < 68（或 <16 岁）无报价
-    - OVR ≥ 85 → 2-3 张；78-84 → 1-2 张；68-77 → 1 张
+    - 16 岁青训初期（ovr<62）可能收到一线队/次级联赛兴趣（低概率）
+    - 低 OVR → 中甲/次级联赛报价；中 OVR → 中超/欧洲中游；高 OVR → 五大联赛豪门
     - fee = 身价 × (0.8~1.5) × (21 岁以下 ×1.3 年轻溢价)
+    - 低龄低实力球员可收到"租借培养"型报价
     """
     rng = random.Random(rng_seed)
-    if player["age"] < 16 or player["ovr"] < 68:
+    if player["age"] < 16:
         return []
-    if player["ovr"] >= 85:
+    ovr = player["ovr"]
+    # 报价数量按实力（放宽门槛：ovr≥62 就有机会，17 岁+ 青训后期也有）
+    if ovr >= 85:
+        n = rng.randint(3, 4)
+    elif ovr >= 78:
         n = rng.randint(2, 3)
-    elif player["ovr"] >= 78:
+    elif ovr >= 70:
         n = rng.randint(1, 2)
+    elif ovr >= 62:
+        n = 1 if rng.random() < 0.7 else 0
+    elif player["age"] >= 17:
+        n = 1 if rng.random() < 0.4 else 0
     else:
-        n = 1
-    pools = [code for code in LEAGUE_POOL if code != player.get("league")]
-    if not pools:
-        pools = list(LEAGUE_POOL)
+        n = 0
+    # 按实力匹配买家联赛档次
+    if ovr >= 80:
+        tier = ["epl", "laliga", "bundesliga", "seriea", "ligue1", "eredivisie", "primeira"]
+    elif ovr >= 72:
+        tier = ["cs", "eredivisie", "primeira", "ligue1", "efl", "seriea"]
+    else:
+        tier = ["cs", "csl2", "efl", "laliga2", "serieb", "bundes2", "ligue2", "eerst", "ligaporta"]
+    # 从世界球队池构建买家（排除玩家所在俱乐部）
+    candidates = []
+    if world:
+        for code, league in world.items():
+            if code not in tier:
+                continue
+            for t in league.teams:
+                if t["team_id"] != player.get("team_id"):
+                    candidates.append({"club": t["team_name"], "league": code})
+    if not candidates:  # 无世界数据时回退豪门池
+        for code in tier:
+            for club in LEAGUE_POOL.get(code, []):
+                candidates.append({"club": club, "league": code})
     cards = []
     for _ in range(n):
-        code = rng.choice(pools)
-        club = rng.choice(LEAGUE_POOL[code])
+        if not candidates:
+            break
+        c = rng.choice(candidates)
+        candidates.remove(c)  # 一队只报一次
         young_premium = 1.3 if player["age"] < 21 else 1.0
-        fee = int(player["value"] * rng.uniform(0.8, 1.5) * young_premium)
-        weekly_wage = int(fee / 5200) + rng.randint(0, 5000)  # 周薪 ≈ 转会费/年52周/100
+        # 租借培养：低龄低实力常见
+        is_loan = player["age"] < 19 and ovr < 72 and rng.random() < 0.35
+        if is_loan:
+            fee = 0
+            weekly_wage = int(max(1200, player["value"] / 15000)) + rng.randint(0, 2000)
+            role = "租借培养"
+        else:
+            fee = int(player["value"] * rng.uniform(0.8, 1.5) * young_premium)
+            weekly_wage = int(fee / 5200) + rng.randint(0, 5000)
+            role = rng.choice(["主力", "轮换", "重点培养"])
         cards.append(OfferCard(
-            club=club, league=code, fee=fee, weekly_wage=weekly_wage,
+            club=c["club"], league=c["league"], fee=fee, weekly_wage=weekly_wage,
             years=rng.randint(3, 5), release_clause=int(fee * rng.uniform(1.5, 2.5)),
-            signing_bonus=int(fee * 0.05), role=rng.choice(["主力", "轮换", "重点培养"])))
+            signing_bonus=int(fee * 0.05), role=role))
     return cards
 
 

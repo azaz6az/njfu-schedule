@@ -1,5 +1,5 @@
 // 足球人生模拟器前端 —— 纯原生 JS，零依赖
-// API 契约见设计文档 §16；后端会话按此实现
+// API 契约见设计文档 §16；决策端点为 SSE 流式（meta → narrative* → done | error）
 const $ = (id) => document.getElementById(id);
 let state = null; // 最近一次后端返回的完整状态（player / narrative / options）
 
@@ -18,7 +18,7 @@ async function api(path, method = "GET", body = null) {
   }
   if (!r.ok) {
     const data = await r.json().catch(() => null);
-    // 截断后端 detail（可能包含完整 URL 与状态码细节），保留前 120 字便于识别
+    // 截断后端 detail（可能包含完整 URL 与状态码细节）
     let msg = (data && data.detail) || r.statusText;
     if (typeof msg === "string" && msg.length > 120) msg = msg.slice(0, 120) + "…";
     const e = new Error(msg);
@@ -98,14 +98,82 @@ async function createGame() {
   } catch (e) { alert(e.message); }
 }
 
+// ---- SSE 流式决策 ----
+
+// 解析 fetch 响应流中的 SSE 事件，逐事件回调
+async function consumeStream(resp, handlers) {
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let eventName = "message";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    // SSE 事件以空行分隔
+    let idx;
+    while ((idx = buf.indexOf("\n\n")) >= 0) {
+      const rawEvent = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      let data = "";
+      for (const line of rawEvent.split("\n")) {
+        if (line.startsWith("event:")) eventName = line.slice(6).trim();
+        else if (line.startsWith("data:")) data += line.slice(5).trim();
+      }
+      if (!data) continue;
+      let payload = null;
+      try { payload = JSON.parse(data); } catch { /* 忽略坏数据 */ }
+      if (payload && handlers[eventName]) await handlers[eventName](payload);
+    }
+  }
+}
+
 async function choose(i) {
+  const storyEl = $("story");
+  // 禁用选项防连点
+  storyEl.querySelectorAll(".opt").forEach((b) => (b.disabled = true));
   try {
-    const r = await api("/api/game/decision", "POST", { choice_id: i });
-    state = r;
-    cacheStory(r);
-    renderAll();
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  } catch (e) { alert(e.message); }
+    const resp = await fetch("/api/game/decision", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ choice_id: i }),
+    });
+    if (!resp.ok) {
+      const e = await resp.json().catch(() => null);
+      throw new Error((e && e.detail) || resp.statusText);
+    }
+    const narrativeEl = document.createElement("p");
+    narrativeEl.className = "narrative streaming";
+    narrativeEl.textContent = "—— 叙事生成中 ——";
+    storyEl.prepend(narrativeEl);
+    let fullText = "";
+    await consumeStream(resp, {
+      meta: (m) => {
+        state = { player: m.player };
+        renderAll();
+        if (m.career_over) renderCareerEnd(m);
+      },
+      narrative: async (n) => {
+        fullText += n.delta;
+        narrativeEl.textContent = fullText;
+        narrativeEl.classList.remove("streaming");
+        storyEl.scrollTop = storyEl.scrollHeight;
+      },
+      done: (d) => {
+        state.player = d.player || state.player;
+        state.narrative = d.narrative;
+        state.options = d.options;
+        state.decision = d.decision;
+        cacheStory({ narrative: d.narrative, options: d.options });
+        renderAll();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      },
+      error: (e) => { throw new Error(e.detail || "叙事生成失败"); },
+    });
+  } catch (e) {
+    alert(e.message);
+    renderStory(); // 恢复选项按钮供重试
+  }
 }
 
 // 刷新恢复：player 等来自 /api/game/state，叙事/选项来自本地缓存
@@ -130,14 +198,19 @@ function loadStory() {
   try { return JSON.parse(localStorage.getItem(STORY_KEY)); } catch { return null; }
 }
 
+// ---- 渲染 ----
+
 function renderAll() {
   const p = state.player || {};
   $("g_name").textContent = [p.name, p.age ? p.age + "岁" : "", p.position, p.club].filter(Boolean).join(" · ");
   $("g_ovr").textContent = p.ovr != null ? p.ovr : "-";
   $("g_value").textContent = p.value != null ? `${(p.value / 1e4).toFixed(0)}万欧` : "-";
+  $("g_stage").textContent = (state.decision || {}).season
+    ? `${state.decision.season}赛季 · ${state.decision.stage}`
+    : (p.national_level ? `国字号：${p.national_level}` : "");
   renderStory();
   renderRadar();
-  $("g_stats").textContent = JSON.stringify(p.career_stats || {}, null, 2);
+  renderStats();
 }
 
 function renderStory() {
@@ -160,6 +233,47 @@ function renderStory() {
     b.onclick = () => choose(i);
     el.appendChild(b);
   });
+}
+
+function renderCareerEnd(m) {
+  // 退役/转教练结局：展示荣誉、里程碑、教练属性
+  const el = $("story");
+  el.innerHTML = "";
+  const div = document.createElement("div");
+  div.className = "career-end";
+  let html = `<h3>🏁 职业生涯结束（${m.ended}）</h3>`;
+  html += "<h3>🏆 生涯荣誉</h3><p>" + (m.honors.length ? m.honors.join("<br>") : "无") + "</p>";
+  html += "<h3>📜 生涯里程碑</h3><p>" + (m.milestones.length ? m.milestones.join("<br>") : "无") + "</p>";
+  if (m.coach) {
+    html += "<h3>🧑‍🏫 教练属性</h3><p>" +
+      Object.entries(m.coach).map(([k, v]) => `${k} ${v}`).join(" / ") + "</p>";
+  }
+  if (m.career_stats) {
+    const rows = Object.entries(m.career_stats)
+      .map(([s, v]) => `${s}赛季：${v.apps}场 ${v.goals}球 ${v.assists}助攻`)
+      .join("<br>");
+    html += "<h3>📊 生涯数据</h3><p>" + rows + "</p>";
+  }
+  div.innerHTML = html;
+  el.appendChild(div);
+}
+
+function renderStats() {
+  const el = $("g_stats");
+  const stats = (state.player && state.player.career_stats) || {};
+  const seasons = Object.keys(stats).sort();
+  if (!seasons.length) {
+    el.innerHTML = '<p class="empty">首个赛季结束后显示赛季数据</p>';
+    return;
+  }
+  const rows = seasons.map((s) => {
+    const v = stats[s];
+    return `<tr><td>${s}</td><td>${v.age ?? "-"}</td><td>${v.apps ?? 0}</td>` +
+      `<td>${v.goals ?? 0}</td><td>${v.assists ?? 0}</td><td>${v.clean_sheets ?? "-"}</td>` +
+      `<td class="club">${v.club ?? ""}</td></tr>`;
+  }).join("");
+  el.innerHTML = `<table><thead><tr><th>赛季</th><th>年龄</th><th>出场</th>` +
+    `<th>进球</th><th>助攻</th><th>零封</th><th>俱乐部</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 // 六大项均值（键名与设计文档 §4.1 一致）
