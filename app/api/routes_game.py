@@ -130,6 +130,19 @@ async def decision(data: DecisionIn, request: Request):
     p["attributes"] = apply_decision_effects(p["attributes"], effects)
     p["morale"] = max(0, min(99, p.get("morale", 70) + effects.get("morale", 0)))
     p["form"] = max(0.5, min(1.5, p.get("form", 1.0) + effects.get("form", 0)))
+    # 伤病状态机：风险累积 → 受伤 → 复出恢复
+    p["injury_risk"] = max(0.0, min(1.0, p.get("injury_risk", 0.0) + effects.get("injury_risk", 0)))
+    if effects.get("get_injured"):
+        p["injured"] = True
+        p["milestones"].append(f"{game['season']}年：遭遇伤病（{game['stage']}）")
+    if effects.get("recover"):
+        p["injured"] = False
+        p["milestones"].append(f"{game['season']}年：伤愈复出")
+    # 位置转型：引擎预定义目标，真正改变位置并重算 OVR
+    pos_change = effects.get("position_change")
+    if pos_change and pos_change in ("ST", "LW", "RW", "CAM", "CM", "CDM", "LB", "RB", "CB"):
+        p["position"] = pos_change
+        p["milestones"].append(f"{game['season']}年：位置转型为{pos_change}")
     # 转会结算（引擎生成的报价卡）
     transfer = effects.get("transfer")
     if transfer:

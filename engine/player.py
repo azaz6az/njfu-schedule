@@ -42,6 +42,7 @@ def create_player(name, birth_year, position, foot, height, weight, region, acad
                    "playstyles": []},
         "potential_rating": roll_potential(seed=_name_seed(name + ":pa")),
         "ovr": 0, "value": 0,
+        "injured": False, "injury_risk": 0.0,
         "contract": {"years": 0, "weekly_wage": 0, "release_clause": 0, "signing_bonus": 0},
         "career_stats": {}, "milestones": [], "honors": [],
         "national_stats": {"u17": {"apps": 0, "goals": 0}, "u20": {"apps": 0, "goals": 0},

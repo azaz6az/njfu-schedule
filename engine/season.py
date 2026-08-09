@@ -8,7 +8,7 @@ v1 简化说明（后续迭代扩展）：
 import random
 
 from engine.attributes import calc_ovr
-from engine.decision import EVENT_LIBRARY, next_decision
+from engine.decision import EVENT_LIBRARY, TRAINING_OPTIONS, next_decision
 from engine.development import age_player_attributes, allocate_growth, growth_points
 from engine.market import generate_offers
 from engine.national import national_callup, next_level
@@ -45,11 +45,21 @@ def _transfer_skeleton(player: dict, game: dict, rng_seed: int) -> dict:
 
 
 def _training_skeleton(player: dict, game: dict) -> dict:
-    """季前备战：训练侧重（效果由引擎预生成）。"""
-    ev = EVENT_LIBRARY["训练加练"]
+    """季前备战：训练侧重（按位置过滤选项，门将使用专属训练项）。"""
+    if player["position"] == "GK":
+        options = [
+            {"label": "加练反应与扑救", "hint": "近距离扑救更稳",
+             "effects": {"attr_delta": {"reflexes": 2, "reactions": 1}, "morale": 1}},
+            {"label": "加练开球与脚下", "hint": "大脚与手抛球更准",
+             "effects": {"attr_delta": {"kicking": 2, "ball_control": 1}, "morale": 1}},
+            {"label": "加练体能", "hint": "耐力提升，恢复",
+             "effects": {"attr_delta": {"stamina": 2}, "morale": 1, "injury_risk": -0.05}},
+        ]
+    else:
+        options = [dict(o) for o in TRAINING_OPTIONS]
     return {"season": game["season"], "stage": game["stage"], "type": "训练加练",
             "narrative_hook": "新赛季前的备战期，教练组让你选择训练重点。",
-            "options": [dict(o) for o in ev["options"]]}
+            "options": options}
 
 
 def _season_end_skeleton(player: dict, game: dict, world: dict, rng_seed: int) -> dict:
@@ -91,7 +101,9 @@ def next_skeleton(player: dict, game: dict, world: dict, rng_seed: int) -> dict:
         return _training_skeleton(player, game)
     if stage == "赛季末":
         return _season_end_skeleton(player, game, world, rng_seed)
-    return next_decision(player, game["season"], stage, rng_seed)
+    # 上半程/下半程事件：传入上一事件类型，防止连续重复
+    last_type = game.get("current_decision", {}).get("type") if game.get("current_decision") else None
+    return next_decision(player, game["season"], stage, rng_seed, last_type=last_type)
 
 
 def advance_stage(game: dict):
