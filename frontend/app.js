@@ -30,6 +30,17 @@ async function api(path, method = "GET", body = null) {
 
 // 启动分流：未配置(403 / configured=false) → 设置页；已配置 → 尝试载入存档
 async function init() {
+  // 防踩坑：直接双击 index.html 打开时（file:// 协议）API 无法访问
+  if (location.protocol === "file:") {
+    document.body.innerHTML =
+      '<div style="max-width:600px;margin:80px auto;padding:32px;background:#1a212b;' +
+      'border-radius:12px;color:#e5e7eb;line-height:2">' +
+      '<h2>⚠️ 请通过服务地址访问</h2>' +
+      '<p>不能直接双击打开 index.html（file:// 协议下无法连接后端）。</p>' +
+      '<p>请先启动服务：<code>python -m uvicorn app.main:app --port 8000</code></p>' +
+      '<p>然后访问：<b>http://127.0.0.1:8000/</b></p></div>';
+    return;
+  }
   let s;
   try {
     s = await api("/api/setup/status");
@@ -43,6 +54,7 @@ async function init() {
   try {
     await refreshState();
     show("game");
+    renderAll(); // 恢复存档后渲染面板/叙事/选项
   } catch {
     show("create"); // 已配置但未建档
   }
