@@ -45,8 +45,8 @@ object CasLoginClient {
             .execute().use { it.body!!.string() }
         val page = parseLoginPage(pageHtml)
         require(page.lt.isNotBlank()) { "登录页缺少 lt 票据" }
-        // 验证码判定
-        val captchaUrl = "$baseUrl/needCaptcha.html?username=${URLEncoder.encode(username, "UTF-8")}&pwdEncrypt2=${URLEncoder.encode(page.salt, "UTF-8")}"
+        // 验证码判定：needCaptcha.html 位于 /authserver/ 下（baseUrl 的上级路径）
+        val captchaUrl = "${originOf(baseUrl)}/authserver/needCaptcha.html?username=${URLEncoder.encode(username, "UTF-8")}&pwdEncrypt2=${URLEncoder.encode(page.salt, "UTF-8")}"
         val needCaptcha = client.newCall(Request.Builder().url(captchaUrl).build())
             .execute().use { it.body!!.string().trim() == "true" }
         if (needCaptcha) {
@@ -76,8 +76,12 @@ object CasLoginClient {
         }
     }
 
+    /** 提取 baseUrl 的协议+主机（如 https://uia.njfu.edu.cn），用于拼接绝对路径 */
+    private fun originOf(baseUrl: String): String =
+        Regex("^https?://[^/]+").find(baseUrl)?.value ?: baseUrl
+
     private fun resolveAction(action: String, baseUrl: String): String =
         if (action.startsWith("http")) action
-        else if (action.startsWith("/")) baseUrl.removeSuffix("/") + action
+        else if (action.startsWith("/")) originOf(baseUrl) + action
         else baseUrl.removeSuffix("/") + "/" + action
 }
