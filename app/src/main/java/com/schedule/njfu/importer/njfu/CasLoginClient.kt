@@ -66,13 +66,25 @@ object CasLoginClient {
             .url(resolveAction(page.action, baseUrl))
             .post(form).build()).execute()
         if (response.code == 302) {
-            Unit   // 重定向到 service → 登录成功，会话 Cookie 已保存
+            // CAS 成功重定向的 Location 必带 ticket=；否则视为异常重定向，不能当作登录成功
+            val location = response.header("Location") ?: ""
+            if (location.contains("ticket=")) {
+                Unit   // 重定向到 service → 登录成功，会话 Cookie 已保存
+            } else {
+                throw IllegalStateException("登录失败：重定向异常")
+            }
         } else {
             val body = response.body?.string().orEmpty()
-            if (body.contains("用户名") || body.contains("密码")) {
-                throw IllegalArgumentException("用户名或密码错误")
+            when {
+                body.contains("您提供的用户名或者密码有误") || body.contains("用户名或密码错误") ->
+                    throw IllegalArgumentException("用户名或密码错误")
+                body.contains("认证服务不可用") ->
+                    throw IllegalStateException("教务系统认证服务暂时不可用，请稍后再试")
+                body.contains("用户名") ->
+                    throw IllegalArgumentException("用户名或密码错误")
+                else ->
+                    throw IllegalStateException("登录失败：HTTP ${response.code}")
             }
-            throw IllegalStateException("登录失败：HTTP ${response.code}")
         }
     }
 

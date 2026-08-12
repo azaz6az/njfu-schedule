@@ -74,4 +74,36 @@ class CasLoginClientTest {
         assertTrue(result.isFailure)
         server.shutdown()
     }
+
+    @Test
+    fun `redirect without ticket is not a success`() {
+        val server = MockWebServer()
+        server.start()
+        server.enqueue(MockResponse().setResponseCode(200).setBody(loginHtml))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("false"))
+        // 302 但 Location 无 ticket（如重定向回错误页）
+        server.enqueue(MockResponse().setResponseCode(302)
+            .addHeader("Location", "https://uia.njfu.edu.cn/authserver/login?service=x"))
+        val result = CasLoginClient.login(
+            baseUrl = server.url("/authserver/login").toString().removeSuffix("/"),
+            username = "2023001", password = "bad")
+        assertTrue(result.isFailure)
+        server.shutdown()
+    }
+
+    @Test
+    fun `reports service unavailable message`() {
+        val server = MockWebServer()
+        server.start()
+        server.enqueue(MockResponse().setResponseCode(200).setBody(loginHtml))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("false"))
+        server.enqueue(MockResponse().setResponseCode(500)
+            .setBody("<html>哎呦，出错啦 认证服务不可用</html>"))
+        val result = CasLoginClient.login(
+            baseUrl = server.url("/authserver/login").toString().removeSuffix("/"),
+            username = "2023001", password = "bad")
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("认证服务") == true)
+        server.shutdown()
+    }
 }
