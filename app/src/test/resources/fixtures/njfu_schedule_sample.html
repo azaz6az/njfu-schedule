@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>班级课表查询</title>
+</head>
+<body>
+<!--
+  fixture 来源说明（构造，非真实抓取）：
+  侦察结果（2026-08-12）：jwxt.njfu.edu.cn 为正方教务系统（sso.jsp + /jsxsd/ 路径），
+  所有页面（含 /jsxsd/kbcx/kbxx_xzb.do 班级课表查询）均 302/JS 跳转到 CAS 登录页
+  https://uia.njfu.edu.cn/authserver/login，无登录态无法匿名获取真实课表 HTML。
+  因此本文件按正方教务系统课表页通用结构构造：
+    - <table> 首行为表头（节次 + 星期一~星期日），其后每行 = 一个节次时段（第1-2节等），
+      每列 = 一个星期；
+    - 课程单元格内用 <br> 分隔：课程名 / 教师 / 周次 / 节次 / 地点；
+    - 周次覆盖四种写法："1-16周"、"1-16周(单)"、"1-16周单周"、"2-16周双周"。
+  真实姓名、学号均已脱敏为假数据。
+  注意：真实教务页编码可能为 GBK，抓取侧需转码为 UTF-8 后再传入解析器。
+-->
+<h3 align="center">2025-2026学年第1学期 班级课表（班级：计算机科学与技术2301班）</h3>
+<table class="kbTable" width="100%" align="center" border="1" cellspacing="0" cellpadding="4">
+  <tr class="kbHeader">
+    <td>节次</td>
+    <td>星期一</td>
+    <td>星期二</td>
+    <td>星期三</td>
+    <td>星期四</td>
+    <td>星期五</td>
+    <td>星期六</td>
+    <td>星期日</td>
+  </tr>
+  <tr>
+    <td class="kbTime">第1-2节<br/>08:00-09:40</td>
+    <td class="kbCourse">高等数学A<br/>王晓明<br/>1-16周<br/>第1-2节<br/>教五楼101</td>
+    <td> </td>
+    <td class="kbCourse">高等数学A<br/>王晓明<br/>1-16周<br/>第1-2节<br/>教五楼101</td>
+    <td> </td>
+    <td class="kbCourse">大学英语<br/>李静<br/>1-16周(单)<br/>第1-2节<br/>教三楼205</td>
+    <td> </td>
+    <td> </td>
+  </tr>
+  <tr>
+    <td class="kbTime">第3-4节<br/>10:00-11:40</td>
+    <td> </td>
+    <td> </td>
+    <td class="kbCourse">数据结构与算法<br/>张伟<br/>1-16周<br/>第3-4节<br/>教四楼301</td>
+    <td> </td>
+    <td> </td>
+    <td> </td>
+    <td> </td>
+  </tr>
+  <tr>
+    <td class="kbTime">第5-6节<br/>14:00-15:40</td>
+    <td> </td>
+    <td class="kbCourse">大学体育（一）<br/>陈强<br/>1-16周单周<br/>第5-6节<br/>体育馆</td>
+    <td> </td>
+    <td> </td>
+    <td> </td>
+    <td> </td>
+    <td> </td>
+  </tr>
+  <tr>
+    <td class="kbTime">第7-8节<br/>16:00-17:40</td>
+    <td> </td>
+    <td> </td>
+    <td> </td>
+    <td class="kbCourse">马克思主义基本原理<br/>刘芳<br/>2-16周双周<br/>第7-8节<br/>教一楼207</td>
+    <td> </td>
+    <td> </td>
+    <td> </td>
+  </tr>
+  <tr>
+    <td class="kbTime">第9-10节<br/>19:00-20:40</td>
+    <td> </td>
+    <td> </td>
+    <td> </td>
+    <td> </td>
+    <td> </td>
+    <td class="kbCourse">程序设计实践<br/>王强<br/>1-8周<br/>第9-10节<br/>实验楼A501</td>
+    <td> </td>
+  </tr>
+</table>
+</body>
+</html>
