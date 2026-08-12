@@ -4,15 +4,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.NavHost
@@ -24,10 +27,13 @@ import com.schedule.njfu.ui.schedule.ExamScreen
 import com.schedule.njfu.ui.schedule.ExamViewModel
 import com.schedule.njfu.ui.schedule.ScheduleScreen
 import com.schedule.njfu.ui.schedule.ScheduleViewModel
+import com.schedule.njfu.ui.settings.SettingsScreen
+import com.schedule.njfu.ui.settings.SettingsViewModel
 
 object Routes {
     const val SCHEDULE = "schedule"
     const val EXAMS = "exams"
+    const val SETTINGS = "settings"
 }
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
@@ -38,6 +44,7 @@ fun AppNav(db: AppDatabase) {
     val tabs = listOf(
         Tab(Routes.SCHEDULE, "课表", Icons.AutoMirrored.Filled.List),
         Tab(Routes.EXAMS, "考试", Icons.Filled.DateRange),
+        Tab(Routes.SETTINGS, "设置", Icons.Filled.Settings),
     )
     Scaffold(
         bottomBar = {
@@ -69,6 +76,12 @@ fun AppNav(db: AppDatabase) {
             composable(Routes.EXAMS) {
                 val vm: ExamViewModel = viewModel(factory = ExamViewModel.Factory(db))
                 ExamScreen(vm, onAdd = { /* 考试添加已内联在 ExamScreen */ })
+            }
+            composable(Routes.SETTINGS) {
+                val context = LocalContext.current
+                val vm: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory(db, context))
+                LaunchedEffect(Unit) { vm.load() }
+                SettingsScreen(vm)
             }
         }
     }
