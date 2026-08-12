@@ -1,15 +1,20 @@
 package com.schedule.njfu.ui.settings
 
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.schedule.njfu.data.AppDatabase
+import com.schedule.njfu.data.ScheduleRepository
 import com.schedule.njfu.data.SettingsEntity
 import com.schedule.njfu.data.SettingsKeys
 import com.schedule.njfu.data.credentials.CredentialStore
 import com.schedule.njfu.data.defaultSemesterStart
 import com.schedule.njfu.data.semesterStart
+import com.schedule.njfu.importer.ExcelImporter
+import com.schedule.njfu.importer.IcsImporter
+import com.schedule.njfu.importer.JsonImporter
 import com.schedule.njfu.reminder.ReminderScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -22,6 +27,8 @@ class SettingsViewModel(private val db: AppDatabase, private val context: Contex
     val semesterStart = MutableStateFlow(defaultSemesterStart())
     val remindMinutes = MutableStateFlow(10)
     val username = MutableStateFlow("")
+
+    private val repo = ScheduleRepository(db)
 
     fun load() {
         viewModelScope.launch {
@@ -69,6 +76,40 @@ class SettingsViewModel(private val db: AppDatabase, private val context: Contex
 
     fun clearCourses() {
         viewModelScope.launch { db.courseDao().clear() }
+    }
+
+    /** 从 JSON 文本导入课程（替换现有数据），返回导入课程数 */
+    suspend fun importFromJson(text: String): Int {
+        val courses = JsonImporter.import(text)
+        repo.replaceAll(courses)
+        return courses.size
+    }
+
+    /** 从 ICS 文本导入课程（替换现有数据），返回导入课程数 */
+    suspend fun importFromIcs(text: String): Int {
+        val courses = IcsImporter.parse(text)
+        repo.replaceAll(courses)
+        return courses.size
+    }
+
+    /** 从 Excel 文件导入课程（替换现有数据），返回导入课程数 */
+    suspend fun importFromExcel(uri: Uri): Int {
+        val input = context.contentResolver.openInputStream(uri)
+            ?: error("无法打开文件")
+        val courses = input.use { ExcelImporter.parse(it) }
+        repo.replaceAll(courses)
+        return courses.size
+    }
+
+    /** 将课程与考试导出为 JSON 备份文件，返回课程数 */
+    suspend fun exportBackup(uri: Uri): Int {
+        val courses = db.courseDao().getAll().map { it.toModel() }
+        val exams = db.examDao().getAll().map { it.toModel() }
+        val json = JsonImporter.export(courses, exams)
+        val out = context.contentResolver.openOutputStream(uri)
+            ?: error("无法创建文件")
+        out.use { it.write(json.toByteArray()) }
+        return courses.size
     }
 
     fun logout() {

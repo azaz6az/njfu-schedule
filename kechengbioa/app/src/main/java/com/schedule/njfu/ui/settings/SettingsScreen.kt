@@ -1,6 +1,8 @@
 package com.schedule.njfu.ui.settings
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -51,6 +53,61 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     var showPeriodDialog by remember { mutableStateOf(false) }
     var showClearConfirm by remember { mutableStateOf(false) }
     var periodTimes by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
+
+    val jsonLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) scope.launch {
+            try {
+                val text = context.contentResolver.openInputStream(uri)
+                    ?.bufferedReader()?.use { it.readText() }
+                    ?: error("无法读取文件")
+                val count = viewModel.importFromJson(text)
+                Toast.makeText(context, "已导入 $count 门课程", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "JSON 导入失败：${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    val icsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) scope.launch {
+            try {
+                val text = context.contentResolver.openInputStream(uri)
+                    ?.bufferedReader()?.use { it.readText() }
+                    ?: error("无法读取文件")
+                val count = viewModel.importFromIcs(text)
+                Toast.makeText(context, "已导入 $count 门课程", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "ICS 导入失败：${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    val excelLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) scope.launch {
+            try {
+                val count = viewModel.importFromExcel(uri)
+                Toast.makeText(context, "已导入 $count 门课程", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Excel 导入失败：${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) scope.launch {
+            try {
+                val count = viewModel.exportBackup(uri)
+                Toast.makeText(context, "已导出 $count 门课程", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "导出失败：${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -111,19 +168,35 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
 
         item { SectionHeader("数据") }
         item {
-            Row(
+            Column(
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 OutlinedButton(
-                    onClick = { Toast.makeText(context, "手动导入将在后续版本开放", Toast.LENGTH_SHORT).show() },
-                    modifier = Modifier.weight(1f),
-                ) { Text("手动导入") }
+                    onClick = { jsonLauncher.launch(arrayOf("application/json")) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("从 JSON 导入") }
+                OutlinedButton(
+                    onClick = { icsLauncher.launch(arrayOf("text/calendar")) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("从 ICS 导入") }
+                OutlinedButton(
+                    onClick = {
+                        excelLauncher.launch(
+                            arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("从 Excel 导入") }
+                OutlinedButton(
+                    onClick = { exportLauncher.launch("schedule_backup.json") },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("导出备份") }
                 Button(
                     onClick = { showClearConfirm = true },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer,
                         contentColor = MaterialTheme.colorScheme.onErrorContainer,
