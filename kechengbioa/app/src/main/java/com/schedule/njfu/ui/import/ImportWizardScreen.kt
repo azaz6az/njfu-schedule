@@ -13,10 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -66,17 +69,25 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
         )
         if (loggedInUsername.isNotBlank()) {
             Spacer(Modifier.height(8.dp))
-            Text(
-                "已登录：学号 $loggedInUsername，可重新导入",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
+            AssistChip(
+                onClick = {},
+                label = {
+                    Text(
+                        "已登录：学号 $loggedInUsername，可重新导入",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
             )
         }
 
         Spacer(Modifier.height(16.dp))
 
         // ---- 自动导入 ----
-        Card(Modifier.fillMaxWidth()) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        ) {
             Column(Modifier.padding(16.dp)) {
                 Text("自动导入", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(4.dp))
@@ -118,6 +129,7 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
                     onClick = { viewModel.autoImport(studentId.trim(), password) },
                     enabled = !loading && studentId.isNotBlank() && password.isNotBlank(),
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(50),
                 ) { Text("开始导入") }
                 Spacer(Modifier.height(12.dp))
                 when (val s = state) {
@@ -154,7 +166,11 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
         Spacer(Modifier.height(16.dp))
 
         // ---- 手动导入 ----
-        Card(Modifier.fillMaxWidth()) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        ) {
             Column(Modifier.padding(16.dp)) {
                 Text("手动导入", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(4.dp))
@@ -169,12 +185,14 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
                     onClick = { showJsonDialog = true },
                     enabled = !loading,
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(50),
                 ) { Text("从 JSON 导入") }
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(
                     onClick = { showIcsDialog = true },
                     enabled = !loading,
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(50),
                 ) { Text("从 ICS 导入") }
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(
@@ -183,6 +201,7 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
                     },
                     enabled = !loading,
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(50),
                 ) { Text("从 Excel 导入") }
             }
         }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -125,6 +126,7 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                 OutlinedButton(
                     onClick = { showLogoutConfirm = true },
                     enabled = username.isNotBlank(),
+                    shape = RoundedCornerShape(50),
                 ) { Text("退出登录") }
             }
         }
@@ -177,10 +179,12 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                 OutlinedButton(
                     onClick = { jsonLauncher.launch(arrayOf("application/json")) },
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(50),
                 ) { Text("从 JSON 导入") }
                 OutlinedButton(
                     onClick = { icsLauncher.launch(arrayOf("text/calendar")) },
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(50),
                 ) { Text("从 ICS 导入") }
                 OutlinedButton(
                     onClick = {
@@ -189,14 +193,17 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(50),
                 ) { Text("从 Excel 导入") }
                 OutlinedButton(
                     onClick = { exportLauncher.launch("schedule_backup.json") },
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(50),
                 ) { Text("导出备份") }
                 Button(
                     onClick = { showClearConfirm = true },
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(50),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer,
                         contentColor = MaterialTheme.colorScheme.onErrorContainer,
