@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -39,6 +40,32 @@ fun ExamScreen(viewModel: ExamViewModel, onAdd: () -> Unit) {
     var showDialog by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
+        // 标题区 + 副标题（共 N 门 · 最近一场 X 天后）
+        val nextDays = exams
+            .mapNotNull { runCatching {
+                ChronoUnit.DAYS.between(LocalDate.now(), LocalDate.parse(it.date))
+            }.getOrNull() }
+            .filter { it >= 0 }
+            .minOrNull()
+        val subtitle = when {
+            exams.isEmpty() -> "暂无考试安排"
+            nextDays == null -> "共 ${exams.size} 门"
+            nextDays == 0L -> "共 ${exams.size} 门 · 最近一场就在今天"
+            else -> "共 ${exams.size} 门 · 最近一场 $nextDays 天后"
+        }
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)) {
+            Text(
+                "考试安排",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         if (exams.isEmpty()) {
             Box(
                 Modifier
@@ -67,6 +94,7 @@ fun ExamScreen(viewModel: ExamViewModel, onAdd: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp),
+            shape = RoundedCornerShape(50),
         ) {
             Text("＋ 添加考试")
         }
@@ -111,6 +139,8 @@ private fun ExamRow(exam: Exam) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         colors = colors,
     ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {

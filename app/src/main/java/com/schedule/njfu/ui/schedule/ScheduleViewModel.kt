@@ -26,11 +26,13 @@ class ScheduleViewModel(private val db: AppDatabase) : ViewModel() {
 
     val currentWeek = MutableStateFlow(0)
     val selectedWeek = MutableStateFlow(0)
+    val semesterStart = MutableStateFlow(LocalDate.now())
 
     fun initIfNeeded() {
         if (selectedWeek.value == 0) {
             viewModelScope.launch {
                 val start = db.settingsDao().semesterStart()
+                semesterStart.value = start
                 val week = WeekUtils.currentWeek(start, LocalDate.now())
                 currentWeek.value = week
                 selectedWeek.value = week

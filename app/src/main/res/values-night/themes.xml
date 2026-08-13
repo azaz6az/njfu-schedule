@@ -1,0 +1,4 @@
+<resources>
+    <!-- 深色模式下系统栏图标显示为浅色 -->
+    <style name="Theme.Schedule" parent="android:Theme.Material.NoActionBar" />
+</resources>
