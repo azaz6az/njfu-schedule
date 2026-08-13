@@ -14,6 +14,18 @@ import com.schedule.njfu.model.WeekUtils
  */
 object JwxtParser {
 
+    /**
+     * 页面是否含"跳转登录"标记（会话失效：未登录时 jsxsd 返回 200 + JS 跳转脚本，而非 302）。
+     * 要求 JS 跳转与登录地址同时出现，避免误伤页面正文/注释中仅提及登录地址的课表页。
+     */
+    fun isLoginRedirect(html: String): Boolean =
+        html.contains("window.location.href") && html.contains("authserver/login")
+
+    /** 页面是否像课表页（含表格与星期表头特征），用于区分"空课表"与"接口异常" */
+    fun looksLikeSchedulePage(html: String): Boolean =
+        html.contains("<table", ignoreCase = true) &&
+            (html.contains("星期") || html.contains("周一") || html.contains("节次"))
+
     fun parseSchedule(html: String): List<Course> {
         val courses = mutableListOf<Course>()
         val rows = Regex("<tr[^>]*>(.*?)</tr>", RegexOption.DOT_MATCHES_ALL).findAll(html).toList()

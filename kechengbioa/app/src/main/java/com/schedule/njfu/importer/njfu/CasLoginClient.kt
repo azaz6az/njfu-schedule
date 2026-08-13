@@ -1,5 +1,6 @@
 package com.schedule.njfu.importer.njfu
 
+import com.schedule.njfu.importer.HttpSession
 import com.schedule.njfu.importer.RsaEncryptor
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
@@ -38,8 +39,9 @@ object CasLoginClient {
         password: String,
     ): Result<Unit> = runCatching {
         // 关闭自动重定向：302 是 CAS 登录成功的标志，需由本方法显式判定；
-        // 302 响应中的 Set-Cookie 会话 Cookie 仍会被 OkHttp CookieJar 保存
-        val client = OkHttpClient.Builder().followRedirects(false).build()
+        // 会话 Cookie 由 HttpSession 共享 CookieJar 保存，登录成功后跟随
+        // sso.jsp 重定向链时建立 jwxt 会话，供后续抓课表请求复用
+        val client = HttpSession.noRedirectClient
         val loginPageUrl = "$baseUrl?service=${URLEncoder.encode(SERVICE_URL, "UTF-8")}"
         val pageHtml = client.newCall(Request.Builder().url(loginPageUrl).build())
             .execute().use { it.body!!.string() }
@@ -69,7 +71,8 @@ object CasLoginClient {
             // CAS 成功重定向的 Location 必带 ticket=；否则视为异常重定向，不能当作登录成功
             val location = response.header("Location") ?: ""
             if (location.contains("ticket=")) {
-                Unit   // 重定向到 service → 登录成功，会话 Cookie 已保存
+                // 跟随 service 重定向（sso.jsp → jsxsd 框架页），校验 ticket 并收下会话 Cookie
+                followServiceRedirect(client, resolveUrl(location, baseUrl))
             } else {
                 throw IllegalStateException("登录失败：重定向异常")
             }
@@ -88,12 +91,27 @@ object CasLoginClient {
         }
     }
 
+    /** 跟随 service 重定向链（最多 5 跳），完成 ticket 校验并建立目标系统会话 */
+    private fun followServiceRedirect(client: OkHttpClient, startUrl: String) {
+        var current = startUrl
+        repeat(5) {
+            val r = client.newCall(Request.Builder().url(current).build()).execute()
+            val code = r.code
+            val location = r.header("Location")
+            r.close()
+            if (code !in 300..399 || location.isNullOrBlank()) return
+            current = resolveUrl(location, current)
+        }
+    }
+
     /** 提取 baseUrl 的协议+主机（如 https://uia.njfu.edu.cn），用于拼接绝对路径 */
     private fun originOf(baseUrl: String): String =
         Regex("^https?://[^/]+").find(baseUrl)?.value ?: baseUrl
 
-    private fun resolveAction(action: String, baseUrl: String): String =
-        if (action.startsWith("http")) action
-        else if (action.startsWith("/")) originOf(baseUrl) + action
-        else baseUrl.removeSuffix("/") + "/" + action
+    private fun resolveAction(action: String, baseUrl: String): String = resolveUrl(action, baseUrl)
+
+    private fun resolveUrl(path: String, baseUrl: String): String =
+        if (path.startsWith("http")) path
+        else if (path.startsWith("/")) originOf(baseUrl) + path
+        else baseUrl.removeSuffix("/") + "/" + path
 }

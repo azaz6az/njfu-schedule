@@ -36,4 +36,19 @@ class JwxtParserTest {
         assertTrue(com.schedule.njfu.model.WeekUtils.contains(odd!!.weeks, 1))
         assertFalse(com.schedule.njfu.model.WeekUtils.contains(odd.weeks, 2))
     }
+
+    @Test
+    fun `detects login redirect page`() {
+        // 未登录时 jsxsd 返回 200 + JS 跳转脚本（非 302）
+        val loginPage = "<html><script languge='javascript'>window.location.href=" +
+            "'https://uia.njfu.edu.cn/authserver/login?service=x'</script></html>"
+        assertTrue(JwxtParser.isLoginRedirect(loginPage))
+        assertFalse(JwxtParser.isLoginRedirect(fixture()))
+    }
+
+    @Test
+    fun `detects schedule page structure`() {
+        assertTrue(JwxtParser.looksLikeSchedulePage(fixture()))
+        assertFalse(JwxtParser.looksLikeSchedulePage("<html><head><title>登录</title></head><body></body></html>"))
+    }
 }
