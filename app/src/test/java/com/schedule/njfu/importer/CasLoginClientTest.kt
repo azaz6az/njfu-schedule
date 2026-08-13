@@ -39,7 +39,7 @@ class CasLoginClientTest {
         server.enqueue(MockResponse().setResponseCode(200).setBody(loginHtml))
         server.enqueue(MockResponse().setResponseCode(200).setBody("false"))
         server.enqueue(MockResponse().setResponseCode(302)
-            .addHeader("Location", "http://jwxt.njfu.edu.cn/sso.jsp?ticket=ST-1"))
+            .addHeader("Location", server.url("/sso.jsp?ticket=ST-1").toString()))
         server.enqueue(MockResponse().setResponseCode(200).setBody("<html>已登录</html>"))
         val result = CasLoginClient.login(
             baseUrl = server.url("/authserver/login").toString().removeSuffix("/"),
@@ -58,6 +58,35 @@ class CasLoginClientTest {
         assertTrue(body.contains("rmShown=1"))
         assertTrue(body.contains("password="))   // 加密密文
         assertTrue(!body.contains("secret123"))  // 明文不能出现
+        server.shutdown()
+    }
+
+    @Test
+    fun `follows sso redirect to establish jwxt session cookie`() {
+        val server = MockWebServer()
+        server.start()
+        server.enqueue(MockResponse().setResponseCode(200).setBody(loginHtml))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("false"))
+        server.enqueue(MockResponse().setResponseCode(302)
+            .addHeader("Location", server.url("/sso.jsp?ticket=ST-1").toString()))
+        server.enqueue(MockResponse().setResponseCode(302)
+            .addHeader("Set-Cookie", "JSESSIONID=abc123; Path=/")
+            .addHeader("Location", server.url("/jsxsd/framework/xsMainV.htmlx").toString()))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("<html>主框架</html>"))
+        val result = CasLoginClient.login(
+            baseUrl = server.url("/authserver/login").toString().removeSuffix("/"),
+            username = "2023001", password = "secret123")
+        assertTrue(result.isSuccess)
+        server.takeRequest()   // 1) 登录页 GET
+        server.takeRequest()   // 2) needCaptcha GET
+        server.takeRequest()   // 3) 表单提交 302
+        val ssoRequest = server.takeRequest()!!
+        assertEquals("/sso.jsp?ticket=ST-1", ssoRequest.path)
+        val frameRequest = server.takeRequest()!!
+        assertEquals("/jsxsd/framework/xsMainV.htmlx", frameRequest.path)
+        // sso.jsp 设置的会话 Cookie 必须带到后续 jsxsd 请求
+        assertTrue("框架页请求应携带 sso.jsp 设置的 JSESSIONID",
+            frameRequest.getHeader("Cookie")?.contains("JSESSIONID=abc123") == true)
         server.shutdown()
     }
 
