@@ -75,4 +75,44 @@ class WeekGridTest {
         assertEquals(0, cells2[0].overlapIndex)
         assertEquals(1, cells2[1].overlapIndex)
     }
+
+    @Test
+    fun `partially overlapping courses split side by side`() {
+        // 周一同 1-2 节与 1-4 节：节次区间部分重叠（共享 1-2），必须并排而非完全覆盖
+        val a = course("A", 1, 1, 2, WeekUtils.maskFor(1, 16))
+        val b = course("B", 1, 1, 4, WeekUtils.maskFor(1, 16))
+        val cells = WeekGrid.cellsFor(listOf(a, b), week = 1)
+        assertEquals(2, cells.size)
+        assertEquals(2, cells[0].overlapCount)
+        assertEquals(2, cells[1].overlapCount)
+        assertTrue(cells[0].overlapIndex != cells[1].overlapIndex)
+    }
+
+    @Test
+    fun `non overlapping courses on same day share a column`() {
+        // 周一 1-2 节与 3-4 节：时间不冲突，不应被并排压缩宽度
+        val a = course("A", 1, 1, 2, WeekUtils.maskFor(1, 16))
+        val b = course("B", 1, 3, 4, WeekUtils.maskFor(1, 16))
+        val cells = WeekGrid.cellsFor(listOf(a, b), week = 1)
+        assertEquals(2, cells.size)
+        assertEquals(1, cells[0].overlapCount)
+        assertEquals(1, cells[1].overlapCount)
+        assertEquals(0, cells[0].overlapIndex)
+        assertEquals(0, cells[1].overlapIndex)
+    }
+
+    @Test
+    fun `mixed overlap packs columns greedily`() {
+        // 1-4 与 1-2、3-4 都冲突，但 1-2 与 3-4 不冲突 → 应只占 2 列
+        val a = course("A", 1, 1, 4, WeekUtils.maskFor(1, 16))
+        val b = course("B", 1, 1, 2, WeekUtils.maskFor(1, 16))
+        val c = course("C", 1, 3, 4, WeekUtils.maskFor(1, 16))
+        val cells = WeekGrid.cellsFor(listOf(a, b, c), week = 1)
+        assertEquals(3, cells.size)
+        assertEquals(2, cells.maxOf { it.overlapCount })
+        val colOfB = cells.first { it.course.name == "B" }.overlapIndex
+        val colOfC = cells.first { it.course.name == "C" }.overlapIndex
+        assertEquals(colOfB, colOfC) // B、C 同列上下排
+    }
+
 }

@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import com.schedule.njfu.data.CourseMapper
 import com.schedule.njfu.model.Course
 import com.schedule.njfu.model.WeekUtils
@@ -69,7 +70,16 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
     val cells = remember(selectedWeek, courses) {
         WeekGrid.cellsFor(courses, selectedWeek)
     }
-    val todayDay = remember { LocalDate.now().dayOfWeek.value }
+    // 今日日期：每分钟刷新一次，避免跨零点后高亮失效
+    var today by remember { mutableStateOf(LocalDate.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000)
+            today = LocalDate.now()
+        }
+    }
+    val todayDay = today.dayOfWeek.value
+    val isCurrentWeek = selectedWeek > 0 && selectedWeek == currentWeek
 
     Box(Modifier.fillMaxSize()) {
         Column(
@@ -89,6 +99,7 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
                 WeekGridContent(
                     cells = cells,
                     todayDay = todayDay,
+                    highlightToday = isCurrentWeek,
                     onCellClick = { day -> dialog = DialogState(null, day, selectedWeek) },
                     onCourseClick = { c -> dialog = DialogState(c, c.dayOfWeek, selectedWeek) },
                 )
@@ -107,7 +118,7 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
             Spacer(Modifier.height(96.dp))
         }
         ExtendedFloatingActionButton(
-            onClick = { dialog = DialogState(null, 1, selectedWeek) },
+            onClick = { dialog = DialogState(null, todayDay, selectedWeek) },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(16.dp),
@@ -159,7 +170,11 @@ private fun WeekSwitcher(
 ) {
     val monday = semesterStart.plusWeeks((selectedWeek - 1).toLong())
     val sunday = monday.plusDays(6)
-    val rangeText = "${monday.monthValue}月${monday.dayOfMonth}日 – ${sunday.monthValue}月${sunday.dayOfMonth}日"
+    val rangeText = if (monday.year == sunday.year) {
+        "${monday.monthValue}月${monday.dayOfMonth}日 – ${sunday.monthValue}月${sunday.dayOfMonth}日"
+    } else {
+        "${monday.year}年${monday.monthValue}月${monday.dayOfMonth}日 – ${sunday.year}年${sunday.monthValue}月${sunday.dayOfMonth}日"
+    }
 
     Row(
         modifier = Modifier
@@ -218,6 +233,7 @@ private fun RoundArrowButton(onClick: () -> Unit, enabled: Boolean, isPrev: Bool
 private fun WeekGridContent(
     cells: List<WeekGrid.Cell>,
     todayDay: Int,
+    highlightToday: Boolean,
     onCellClick: (Int) -> Unit,
     onCourseClick: (Course) -> Unit,
 ) {
@@ -243,8 +259,8 @@ private fun WeekGridContent(
                         Text(
                             "周${DayLabels[i]}",
                             style = MaterialTheme.typography.labelMedium,
-                            fontWeight = if (day == todayDay) FontWeight.Bold else FontWeight.Normal,
-                            color = if (day == todayDay) MaterialTheme.colorScheme.primary
+                            fontWeight = if (highlightToday && day == todayDay) FontWeight.Bold else FontWeight.Normal,
+                            color = if (highlightToday && day == todayDay) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -291,7 +307,7 @@ private fun WeekGridContent(
                                             .padding(1.dp)
                                             .clip(RoundedCornerShape(10.dp))
                                             .background(
-                                                if (c + 1 == todayDay) {
+                                                if (highlightToday && c + 1 == todayDay) {
                                                     MaterialTheme.colorScheme.primaryContainer
                                                 } else {
                                                     MaterialTheme.colorScheme.surface
@@ -348,7 +364,7 @@ private fun CourseCard(course: Course, modifier: Modifier) {
             Text(
                 course.name,
                 color = Color.White,
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -356,16 +372,16 @@ private fun CourseCard(course: Course, modifier: Modifier) {
             if (course.location.isNotBlank()) {
                 Text(
                     course.location,
-                    color = Color.White.copy(alpha = 0.9f),
-                    fontSize = 9.sp,
+                    color = Color.White.copy(alpha = 0.95f),
+                    fontSize = 10.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
             Text(
                 "${course.startPeriod}-${course.endPeriod}节",
-                color = Color.White.copy(alpha = 0.85f),
-                fontSize = 9.sp,
+                color = Color.White.copy(alpha = 0.92f),
+                fontSize = 10.sp,
                 maxLines = 1,
             )
         }
