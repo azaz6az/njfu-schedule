@@ -304,14 +304,16 @@ private fun WeekGridContent(
                         }
                     }
                     cells.forEach { cell ->
+                        // 同格多门课并排：把列宽按数量均分
+                        val slotWidth = colWidth / cell.overlapCount
                         CourseCard(
                             course = cell.course,
                             modifier = Modifier
                                 .offset(
-                                    x = colWidth * cell.col,
+                                    x = colWidth * cell.col + slotWidth * cell.overlapIndex,
                                     y = RowHeight * cell.row,
                                 )
-                                .width(colWidth - CourseGap)
+                                .width(slotWidth - CourseGap)
                                 .height(RowHeight * cell.rowSpan - CourseGap)
                                 .clickable { onCourseClick(cell.course) },
                         )
@@ -324,7 +326,8 @@ private fun WeekGridContent(
 
 @Composable
 private fun CourseCard(course: Course, modifier: Modifier) {
-    val bg = Color(CourseMapper.displayColor(course.color))
+    val rawColor = if (course.color == 0) CourseMapper.colorFor(course.name) else course.color
+    val bg = Color(CourseMapper.displayColor(rawColor))
     Row(
         modifier
             .clip(RoundedCornerShape(8.dp))

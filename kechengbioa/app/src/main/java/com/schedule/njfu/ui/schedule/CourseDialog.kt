@@ -25,7 +25,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.schedule.njfu.data.CourseMapper
-import com.schedule.njfu.importer.ExcelImporter
 import com.schedule.njfu.model.Course
 import com.schedule.njfu.model.WeekUtils
 
@@ -195,22 +194,5 @@ private fun maskToText(mask: Int): String {
     return parts.joinToString(",")
 }
 
-/** "1-16"、"1,3,5"、"单周"、"双周"、"1-16(单)" / "1-16（双）" 风格解析 */
-private fun parseWeeksInput(text: String): Int {
-    val t = text.trim()
-    if (t == "单周") return WeekUtils.oddWeeks(1, WeekUtils.MAX_WEEKS)
-    if (t == "双周") return WeekUtils.evenWeeks(1, WeekUtils.MAX_WEEKS)
-    val suffix = Regex("^(.+?)[（(](单|双)[)）]$").find(t)
-    if (suffix != null) {
-        val base = ExcelImporter.parseWeeks(suffix.groupValues[1])
-        val odd = suffix.groupValues[2] == "单"
-        var mask = 0
-        for (w in 1..WeekUtils.MAX_WEEKS) {
-            if (WeekUtils.contains(base, w) && (w % 2 == 1) == odd) {
-                mask = mask or (1 shl (w - 1))
-            }
-        }
-        return mask
-    }
-    return ExcelImporter.parseWeeks(t)
-}
+/** "1-16"、"1,3,5"、"单周"、"双周"、"1-16(单)" / "1-16（双）" 风格解析（统一解析器） */
+private fun parseWeeksInput(text: String): Int = WeekUtils.parseWeeksText(text)

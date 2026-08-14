@@ -32,6 +32,21 @@ class CasLoginClientTest {
     }
 
     @Test
+    fun `parses salt from mobile simplified page js variable`() {
+        // 移动端 UA 会收到精简版登录页：salt 仅在 JS 变量赋值中，无 HTML input
+        val mobileHtml = """
+            <html><body>
+            <script>var pwdDefaultEncryptSalt = "mobileSalt123456";</script>
+            <input type="hidden" name="lt" value="LT-mobile"/>
+            <input type="hidden" name="execution" value="e1s1"/>
+            </body></html>
+        """.trimIndent()
+        val page = CasLoginClient.parseLoginPage(mobileHtml)
+        assertEquals("LT-mobile", page.lt)
+        assertEquals("mobileSalt123456", page.salt)
+    }
+
+    @Test
     fun `posts encrypted credentials and follows redirect`() {
         val server = MockWebServer()
         server.start()

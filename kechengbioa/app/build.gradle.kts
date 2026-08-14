@@ -53,6 +53,9 @@ dependencies {
     implementation("androidx.glance:glance-appwidget:1.1.1")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("org.dhatim:fastexcel-reader:0.18.2")
+    // 教务系统导出为老式 .xls（BIFF），用 POI 的 HSSF 读取（排除会与 Android 运行时冲突的日志实现，保留 log4j-api）
+    implementation("org.apache.poi:poi:5.2.5")
+    implementation("org.apache.logging.log4j:log4j-api:2.20.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")

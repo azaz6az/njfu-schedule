@@ -41,10 +41,12 @@ APK 输出：`app/build/outputs/apk/debug/app-debug.apk`，直接安装到手机
 
 ## 南林教务对接说明
 
-- 登录：`uia.njfu.edu.cn`（金智教育 CAS），密码为 **AES-128-CBC 复合加密**（salt 作密钥 + 随机 64 字符前缀 + 随机 IV，与线上 `encrypt.js` 一致，见 `docs/njfu-cas-notes.md`）
-- 课表端点：`jwxt.njfu.edu.cn/jsxsd/` 系列（**登录后课表页 URL 需真机验证**，当前实现 `xskb_list.do` 为假设路径，若抓取失败按实际页面调整 `NjfuAdapter.fetchScheduleHtml()`）
-- 验证码：`needCaptcha.html` 判定；触发时 App 提示手动导入兜底
-- 风险：教务系统改版会导致自动导入失效——适配器隔离在 `importer/njfu/`，修复只动该目录；手动导入始终可用
+- **自动导入 = WebView 登录 + Cookie 桥接**：`CasLoginActivity` 用系统 Chrome 内核打开 CAS 登录页，用户完成登录（含验证码）后读取 jwxt 会话 Cookie（`bzb_jsxsd`），`NjfuAdapter.fetchScheduleWithCookies()` 带 Cookie 抓取 `xskb_list.do` 课表页。
+  - 原因：实测 jwxt 反向代理会拒绝一切非浏览器客户端的 CAS ticket 落地（OkHttp/curl/httpx 均 404，仅真实浏览器通过），故登录必须走 WebView；带有效会话 Cookie 的普通页面请求则可正常访问。
+  - 课表页结构（`<table id="timetable">`、大节行、kbcontent 变体 div、`-----` 分隔多课程块）已用真实页面 fixture 锁定，见 `JwxtParser`。
+- **手动导入兜底**：推荐教务网页端「学生个人课表」导出的 `.xls`（`NjfuXlsImporter`，真实导出文件已验证）；另支持 JSON 备份 / ICS / Excel（xlsx）。
+- **周次解析**：统一入口 `WeekUtils.parseWeeksText()`，支持 `1-16`、`1,3,5`、`1-12(周)[01-02节]`、`1-12([周])[01-02节]`、`1-16(单)`、`2-16(双)`、`单周` 等写法；解析失败按全学期显示并在导入结果中提示。
+- 历史参考：`CasLoginClient`/`RsaEncryptor` 实现了表单登录协议（AES-128-CBC 复合加密，与线上 `encrypt.js` 一致），现因 WAF 拦截不作为主路径，保留供协议回归测试。
 
 ## 项目结构
 

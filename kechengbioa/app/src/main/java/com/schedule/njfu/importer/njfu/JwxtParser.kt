@@ -4,13 +4,14 @@ import com.schedule.njfu.model.Course
 import com.schedule.njfu.model.WeekUtils
 
 /**
- * 正方教务系统课表 HTML 解析器。
+ * 正方教务系统课表 HTML 解析器（按南林真实页面结构实现，见 test fixtures/njfu_schedule_sample.html）。
  *
- * 期望结构（见 test fixtures/njfu_schedule_sample.html）：
- *  - <table> 首行为表头（节次 + 星期一~星期日），其后每行 = 一个节次时段（第1-2节…第9-10节），
- *    每列 = 一个星期；
- *  - 课程单元格内以 <br> 分隔：课程名 / 教师 / 周次 / 节次 / 地点；
- *  - 周次写法支持 "1-16周"、"1-16周(单)"、"1-16周单周"、"2-16周双周"、"单周"、"双周"。
+ * 真实页面结构：
+ *  - `<table id="timetable">`：首行为星期表头；其后每行第一列 `<th>` 为「第N大节」标签（N=一~六），
+ *    其余 7 个 `<td>` 对应星期一~星期日；最后一行是「备注」行（跳过）。
+ *  - 每个单元格含 3 个变体 div（kbcontent1 / kbcontent / kbcontent 空），取第一个非空 `class="kbcontent"` 的内容；
+ *  - 变体 div 内一门课一块，多门课以 `-----` 横线分隔；每块内 `<font title=...>` 标注：
+ *      无 title=课程名，教师/周次(节次)/教学楼/教室；`通知单编号`/`班级`/`备注` 等隐藏字段忽略。
  */
 object JwxtParser {
 
@@ -28,55 +29,106 @@ object JwxtParser {
 
     fun parseSchedule(html: String): List<Course> {
         val courses = mutableListOf<Course>()
-        val rows = Regex("<tr[^>]*>(.*?)</tr>", RegexOption.DOT_MATCHES_ALL).findAll(html).toList()
-        // 第一行是表头（节次 + 星期），跳过；其余每行 = 一个节次时段
-        val dataRows = rows.drop(1)
-        for ((i, row) in dataRows.withIndex()) {
-            // 行 0 → 第1-2节，行 1 → 第3-4节……
-            val startPeriod = i * 2 + 1
-            val cells = Regex("<td[^>]*>(.*?)</td>", RegexOption.DOT_MATCHES_ALL)
-                .findAll(row.groupValues[1]).toList()
-            for ((cellIndex, cell) in cells.withIndex()) {
-                if (cellIndex == 0) continue // 第 0 列是节次/时间列，非星期
-                val text = Regex("<[^>]+>").replace(cell.groupValues[1], "\n")
-                    .replace("&nbsp;", " ").trim().lines().map { it.trim() }.filter { it.isNotEmpty() }
-                if (text.size < 2) continue // 空单元格
-                val course = parseCell(text, dayOfWeek = cellIndex, startPeriod = startPeriod)
-                    ?: continue
-                courses += course
+        val table = Regex("<table[^>]*id=\"timetable\"[^>]*>(.*?)</table>", RegexOption.DOT_MATCHES_ALL)
+            .find(html)?.groupValues?.get(1) ?: return courses
+        val rows = Regex("<tr[^>]*>(.*?)</tr>", RegexOption.DOT_MATCHES_ALL).findAll(table).toList()
+        for (row in rows) {
+            val inner = row.groupValues[1]
+            val labelHtml = Regex("<th[^>]*>(.*?)</th>", RegexOption.DOT_MATCHES_ALL)
+                .find(inner)?.groupValues?.get(1)
+            val label = labelHtml?.let { cleanText(it) } ?: ""
+            val blockMatch = Regex("^第([一二三四五六七八九十]+)大节$").find(label) ?: continue
+            val block = WeekUtils.chineseToInt(blockMatch.groupValues[1]) ?: continue
+            val startPeriod = block * 2 - 1
+            val endPeriod = block * 2
+            val tds = Regex("<td[^>]*>(.*?)</td>", RegexOption.DOT_MATCHES_ALL)
+                .findAll(inner).toList()
+            for ((idx, td) in tds.withIndex()) {
+                if (idx >= 7) break
+                parseCell(td.groupValues[1], dayOfWeek = idx + 1, startPeriod, endPeriod, courses)
             }
         }
         return courses
     }
 
-    private fun parseCell(lines: List<String>, dayOfWeek: Int, startPeriod: Int): Course? {
-        val name = lines[0]
-        val teacher = lines.getOrNull(1) ?: ""
-        val location = lines.firstOrNull {
-            it.contains("教") || it.contains("楼") || it.contains("室") || it.contains("馆")
-        } ?: ""
-        val weekText = lines.firstOrNull { it.contains("周") } ?: ""
-        return Course(
-            name = name,
-            teacher = teacher,
-            location = location,
-            dayOfWeek = dayOfWeek,
-            startPeriod = startPeriod,
-            endPeriod = startPeriod + 1,
-            weeks = parseWeeks(weekText),
-            color = 0,
-        )
-    }
-
-    private fun parseWeeks(text: String): Int {
-        if (text.isBlank()) return 0
-        val range = Regex("(\\d+)\\s*-\\s*(\\d+)").find(text)
-        val start = range?.groupValues?.get(1)?.toIntOrNull() ?: 1
-        val end = range?.groupValues?.get(2)?.toIntOrNull() ?: WeekUtils.MAX_WEEKS
-        return when {
-            text.contains("单") -> WeekUtils.oddWeeks(start, end)
-            text.contains("双") -> WeekUtils.evenWeeks(start, end)
-            else -> WeekUtils.maskFor(start, end)
+    /** 从单元格 HTML 提取课程（一块一 Course，块间以 `-----` 分隔） */
+    private fun parseCell(
+        cellHtml: String,
+        dayOfWeek: Int,
+        startPeriod: Int,
+        endPeriod: Int,
+        out: MutableList<Course>,
+    ) {
+        val content = visibleKbContent(cellHtml) ?: return
+        for (block in content.split(Regex("-{5,}"))) {
+            var name = ""
+            var teacher = ""
+            var weekText = ""
+            var building = ""
+            var room = ""
+            val fonts = Regex("<font([^>]*)>(.*?)</font>", RegexOption.DOT_MATCHES_ALL)
+                .findAll(block).toList()
+            for (f in fonts) {
+                val attrs = f.groupValues[1]
+                val text = cleanText(f.groupValues[2])
+                val title = Regex("title=(\"([^\"]*)\"|'([^']*)')").find(attrs)
+                    ?.let { m -> m.groupValues[2].ifEmpty { m.groupValues[3] } } ?: ""
+                when {
+                    title.isEmpty() && name.isEmpty() && text.isNotEmpty() -> name = text
+                    title == "教师" -> teacher = text
+                    title == "周次(节次)" -> weekText = text
+                    title == "教学楼" -> building = text.trim('[', '【', '】', ']')
+                    title == "教室" -> room = text
+                }
+            }
+            if (name.isBlank()) continue
+            val location = listOf(building, room).filter { it.isNotBlank() }.joinToString(" ")
+            out += Course(
+                name = name,
+                teacher = teacher,
+                location = location,
+                dayOfWeek = dayOfWeek,
+                startPeriod = startPeriod,
+                endPeriod = endPeriod,
+                weeks = WeekUtils.parseWeeksText(weekText),
+                color = 0,
+            )
         }
     }
+
+    /**
+     * 取单元格里第一个非空的 `class="kbcontent"` div 内容；没有则退回 `kbcontent1`（简版：课程名/周次/教室）。
+     * 原始页面三个变体 div 均 display:none，由页面 JS 切换显示，故不能依赖 style 判断——
+     * 直接按 class 取第一个非空变体。
+     */
+    private fun visibleKbContent(cellHtml: String): String? {
+        val bodies = linkedMapOf<String, String>()
+        val chunks = Regex("(?=<div id=\")").split(cellHtml)
+        for (chunk in chunks) {
+            val m = Regex("<div id=\"[^\"]+\"\\s+style=\"[^\"]*\"\\s*class=\"([^\"]+)\"")
+                .find(chunk) ?: continue
+            val cls = m.groupValues[1]
+            if (bodies.containsKey(cls)) continue
+            val body = chunk
+                .substring(m.range.last + 1)
+                .replace(Regex("</div>\\s*$"), "")
+            bodies[cls] = body
+        }
+        for (cls in listOf("kbcontent", "kbcontent1")) {
+            val b = bodies[cls] ?: continue
+            if (cleanText(b).isNotEmpty()) return b
+        }
+        return null
+    }
+
+    /** 去标签 + 常见实体反转义 */
+    private fun cleanText(s: String): String =
+        s.replace(Regex("<[^>]+>"), "")
+            .replace("&nbsp;", " ")
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .trim()
 }

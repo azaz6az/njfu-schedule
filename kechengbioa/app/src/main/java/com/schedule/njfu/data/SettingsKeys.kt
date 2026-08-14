@@ -17,10 +17,10 @@ suspend fun SettingsDao.semesterStart(): LocalDate {
 
 fun defaultSemesterStart(): LocalDate {
     val now = LocalDate.now()
-    // 默认取最近的 9 月 1 日/2 月 1 日（不晚于今天），归一化到当周周一
+    // 秋季学期从 9 月 1 日、春季学期从 3 月 1 日（含寒假前的 2 月尾巴归入春季）
+    // 选则最近一个不晚于今天的开学日，归一化到当周周一
     val candidates = listOf(
         LocalDate.of(now.year, 9, 1),
-        LocalDate.of(now.year, 2, 1),
         LocalDate.of(now.year, 3, 1),
     )
     val future = candidates.filter { !it.isAfter(now) }.maxOrNull() ?: candidates.first()
