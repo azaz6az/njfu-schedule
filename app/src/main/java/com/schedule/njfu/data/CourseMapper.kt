@@ -4,7 +4,12 @@ import com.schedule.njfu.ui.theme.CoursePalette
 import kotlin.math.pow
 
 object CourseMapper {
-    private val palette = CoursePalette.colors.map { it.value.toInt() }
+    /**
+     * 注意：Color.value 是 ULong，编码为 0xAARRGGBB00000000（ARGB 在高 32 位），
+     * .value.toInt() 取低 32 位恒为 0 → 卡片全透明（白底无字）。
+     * 必须右移 32 位取 ARGB。
+     */
+    private val palette = CoursePalette.colors.map { (it.value shr 32).toInt() }
 
     /** WCAG 白字对比度阈值：背景需足够深，白字才可读（AA 正文 ≥ 4.5:1） */
     private const val MAX_BG_LUMINANCE = 0.1833

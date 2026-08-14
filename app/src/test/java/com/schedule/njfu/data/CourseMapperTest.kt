@@ -1,5 +1,6 @@
 package com.schedule.njfu.data
 
+import androidx.compose.ui.graphics.Color
 import com.schedule.njfu.ui.theme.CoursePalette
 import org.junit.Assert.*
 import org.junit.Test
@@ -35,7 +36,7 @@ class CourseMapperTest {
         val light = listOf(0xFFA8BCA3, 0xFF9FB4C7, 0xFFD6B8B8, 0xFFC0B4A8, 0xFFB3A9C4, 0xFFA9BDB5).map { it.toInt() }
         light.forEachIndexed { i, raw ->
             val mapped = CourseMapper.displayColor(raw)
-            assertEquals("槽位 $i 未映射", CoursePalette.colors[i].value.toInt(), mapped)
+            assertEquals("槽位 $i 未映射", (CoursePalette.colors[i].value shr 32).toInt(), mapped)
             assertTrue(CourseMapper.isPaletteColor(mapped))
         }
     }
@@ -87,6 +88,27 @@ class CourseMapperTest {
         val dark = 0xFF123456.toInt()
         assertEquals(dark, CourseMapper.displayColor(dark))
         assertTrue(CourseMapper.whiteTextContrastOk(dark))
+    }
+
+
+    @Test
+    fun `colorFor returns opaque non-zero colors`() {
+        // 回归：Color.value.toInt() 曾取到低 32 位恒为 0，导致卡片全透明（白底无字）
+        val colors = listOf("高等数学", "大学英语", "数据结构", "体育", "线性代数")
+        for (name in colors) {
+            val c = CourseMapper.colorFor(name)
+            assertTrue("colorFor($name)=$c 必须是全不透明 ARGB", c.toLong() and 0xFF000000.toLong() != 0L)
+            assertTrue("colorFor($name)=$c 不能是 0（透明）", c != 0)
+        }
+    }
+
+    @Test
+    fun `palette colors are opaque and match theme definition`() {
+        for (color in CoursePalette.colors) {
+            assertEquals("alpha 必须为 1.0（否则卡片透明露出白底）", 1f, color.alpha, 0.001f)
+            // value.toInt() 的低 32 位是 colorSpace 信息而非 ARGB，此处直接验证分量
+            assertTrue("red 分量异常: ${color.red}", color.red in 0.2f..0.9f)
+        }
     }
 
 }
