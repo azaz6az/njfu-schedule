@@ -63,15 +63,19 @@ private val DarkColors = darkColorScheme(
     onErrorContainer = Color(0xFFEAC0C0),
 )
 
-/** 课程卡片 6 色板（莫兰迪低饱和，白字可读） */
+/**
+ * 课程卡片 6 色板（莫兰迪低饱和 · 加深档）。
+ * 白字对比度实测 5.1~6.2:1（WCAG AA 正文 ≥ 4.5:1），配合
+ * CourseCard 内 95%/92% 白字仍 ≥ 4.5:1，保证可读性。
+ */
 object CoursePalette {
     val colors = listOf(
-        Color(0xFFA8BCA3), // 灰绿
-        Color(0xFF9FB4C7), // 灰蓝
-        Color(0xFFD6B8B8), // 灰粉
-        Color(0xFFC0B4A8), // 暖灰
-        Color(0xFFB3A9C4), // 灰紫
-        Color(0xFFA9BDB5), // 灰青
+        Color(0xFF4E6B58), // 灰绿
+        Color(0xFF4A647C), // 灰蓝
+        Color(0xFF8A5E5E), // 灰粉
+        Color(0xFF73675A), // 暖灰
+        Color(0xFF6A5F78), // 灰紫
+        Color(0xFF58746A), // 灰青
     )
 }
 
