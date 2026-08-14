@@ -14,8 +14,9 @@ import com.schedule.njfu.data.SettingsKeys
 import com.schedule.njfu.data.semesterStart
 import com.schedule.njfu.model.Course
 import com.schedule.njfu.model.WeekUtils
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
@@ -84,7 +85,7 @@ object ReminderScheduler {
     fun defaultPeriodTimes(): List<Pair<Int, String>> = listOf(
         1 to "08:00", 2 to "09:00", 3 to "10:00", 4 to "11:00",
         5 to "14:00", 6 to "15:00", 7 to "16:00", 8 to "17:00",
-        9 to "19:00", 10 to "20:00",
+        9 to "19:00", 10 to "20:00", 11 to "21:00", 12 to "22:00",
     )
 
     /** App 启动/设置变更后调用：重排今日提醒 */
@@ -99,10 +100,17 @@ object ReminderScheduler {
 }
 
 class BootReceiver : BroadcastReceiver() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            GlobalScope.launch(Dispatchers.IO) {
+        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+        // goAsync 保证广播在后台重排完成后才结束，避免进程被提前回收
+        val pending = goAsync()
+        scope.launch {
+            try {
                 ReminderScheduler.rescheduleToday(context)
+            } finally {
+                pending.finish()
             }
         }
     }

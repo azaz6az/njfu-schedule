@@ -5,6 +5,7 @@ import okhttp3.CookieJar
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
 /**
  * 全局共享的 HTTP 会话：登录与抓课表共用同一个 CookieJar，
@@ -35,10 +36,18 @@ object HttpSession {
     }
 
     val client: OkHttpClient by lazy {
-        OkHttpClient.Builder().cookieJar(cookieJar).build()
+        OkHttpClient.Builder().cookieJar(cookieJar)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .callTimeout(30, TimeUnit.SECONDS)
+            .build()
     }
 
     val noRedirectClient: OkHttpClient by lazy {
-        OkHttpClient.Builder().cookieJar(cookieJar).followRedirects(false).build()
+        OkHttpClient.Builder().cookieJar(cookieJar).followRedirects(false)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .callTimeout(30, TimeUnit.SECONDS)
+            .build()
     }
 }

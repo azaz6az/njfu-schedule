@@ -41,7 +41,7 @@ class CredentialStore(context: Context) {
 
     fun clear() {
         prefs.edit().clear().apply()
-        androidKeyStore.deleteEntry(keyAlias)
+        runCatching { androidKeyStore.deleteEntry(keyAlias) }
     }
 
     private fun getOrCreateKey(): SecretKey {

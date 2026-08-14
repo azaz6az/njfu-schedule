@@ -28,6 +28,7 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.schedule.njfu.MainActivity
 import com.schedule.njfu.data.AppDatabase
+import com.schedule.njfu.data.CourseMapper
 import com.schedule.njfu.data.semesterStart
 import com.schedule.njfu.model.Course
 import com.schedule.njfu.model.WeekUtils
@@ -104,6 +105,8 @@ private fun RowScope.DayColumn(day: Int, courses: List<Course>, today: Int) {
 
 @Composable
 private fun CourseBlock(course: Course) {
+    val raw = if (course.color == 0) CourseMapper.colorFor(course.name) else course.color
+    val bg = Color(CourseMapper.displayColor(raw))
     Text(
         course.name.take(1),
         style = TextStyle(
@@ -116,9 +119,13 @@ private fun CourseBlock(course: Course) {
             .fillMaxWidth()
             .height(18.dp)
             .padding(1.dp)
-            .background(Color(course.color)),
+            .background(bg),
         maxLines = 1,
     )
 }
 
 private val DAY_LABELS = listOf("一", "二", "三", "四", "五", "六", "日")
+
+class WeekWidgetReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget get() = WeekWidget()
+}

@@ -1,6 +1,7 @@
 package com.schedule.njfu.importer
 
 import com.schedule.njfu.importer.njfu.JwxtParser
+import com.schedule.njfu.model.WeekUtils
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -12,29 +13,55 @@ class JwxtParserTest {
         javaClass.classLoader!!.getResource("fixtures/njfu_schedule_sample.html")!!.readText()
 
     @Test
-    fun `parses schedule table rows`() {
+    fun `parses real schedule page into 21 courses`() {
         val courses = JwxtParser.parseSchedule(fixture())
-        assertTrue("fixture 应至少解析出 3 门课，实际 ${courses.size}", courses.size >= 3)
+        assertEquals("真实课表应解析出 21 个课程块", 21, courses.size)
     }
 
     @Test
-    fun `fixture course fields are populated`() {
+    fun `course fields are populated from font titles`() {
         val courses = JwxtParser.parseSchedule(fixture())
-        val first = courses.first()
-        assertTrue(first.name.isNotBlank())
-        assertTrue(first.dayOfWeek in 1..7)
-        assertTrue(first.startPeriod >= 1)
-        assertTrue(first.endPeriod >= first.startPeriod)
-        assertTrue(first.weeks != 0)
+        val stat = courses.first { it.name == "多元统计分析方法" && it.dayOfWeek == 1 }
+        assertEquals("耿阳", stat.teacher)
+        assertEquals("教五楼 50613", stat.location)
+        assertEquals(1, stat.startPeriod)
+        assertEquals(2, stat.endPeriod)
+        assertTrue(WeekUtils.contains(stat.weeks, 1))
+        assertTrue(WeekUtils.contains(stat.weeks, 12))
+        assertFalse(WeekUtils.contains(stat.weeks, 13))
     }
 
     @Test
-    fun `odd week course only contains odd weeks`() {
+    fun `multi-block cell splits into separate courses`() {
+        // 周四第二大节：区块链 3周/7周/8周 + 大数据 11-13周，共 4 块
         val courses = JwxtParser.parseSchedule(fixture())
-        val odd = courses.firstOrNull { it.name == "大学英语" }
-        assertTrue("未解析到大学英语", odd != null)
-        assertTrue(com.schedule.njfu.model.WeekUtils.contains(odd!!.weeks, 1))
-        assertFalse(com.schedule.njfu.model.WeekUtils.contains(odd.weeks, 2))
+        val cell = courses.filter { it.dayOfWeek == 4 && it.startPeriod == 3 && it.endPeriod == 4 }
+        assertEquals(4, cell.size)
+        val block = cell.first { it.name == "区块链技术与应用" && it.location == "教五楼 50218" }
+        assertTrue(WeekUtils.contains(block.weeks, 3))
+        assertFalse(WeekUtils.contains(block.weeks, 4))
+        val big = cell.first { it.name == "大数据挖掘与可视化" }
+        assertEquals("房银海", big.teacher)
+        assertTrue(WeekUtils.contains(big.weeks, 11))
+        assertTrue(WeekUtils.contains(big.weeks, 13))
+    }
+
+    @Test
+    fun `comma separated week ranges`() {
+        val courses = JwxtParser.parseSchedule(fixture())
+        val block = courses.first { it.name == "区块链技术与应用" && it.dayOfWeek == 5 }
+        assertTrue(WeekUtils.contains(block.weeks, 8))
+        assertTrue(WeekUtils.contains(block.weeks, 10))
+        assertFalse(WeekUtils.contains(block.weeks, 7))
+        assertFalse(WeekUtils.contains(block.weeks, 11))
+    }
+
+    @Test
+    fun `remark row is skipped`() {
+        val courses = JwxtParser.parseSchedule(fixture())
+        assertTrue("备注行不应生成课程", courses.none { it.name.contains("课程设计") })
+        assertTrue(courses.none { it.name.contains("备注") })
+        assertTrue("不应出现第 11 节以上的伪课程", courses.none { it.startPeriod > 10 })
     }
 
     @Test

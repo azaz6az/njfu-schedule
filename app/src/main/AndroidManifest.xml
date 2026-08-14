@@ -21,6 +21,10 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ui.import.CasLoginActivity"
+            android:exported="false" />
+
         <receiver
             android:name=".widget.ScheduleWidgetReceiver"
             android:exported="true">

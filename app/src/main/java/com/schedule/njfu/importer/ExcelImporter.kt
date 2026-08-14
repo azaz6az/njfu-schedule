@@ -36,21 +36,6 @@ object ExcelImporter {
         return courses
     }
 
-    /** 支持 "1-16"、"1,3,5"、"单周"、"双周" */
-    fun parseWeeks(text: String): Int {
-        val t = text.trim()
-        if (t == "单周") return WeekUtils.oddWeeks(1, WeekUtils.MAX_WEEKS)
-        if (t == "双周") return WeekUtils.evenWeeks(1, WeekUtils.MAX_WEEKS)
-        var mask = 0
-        for (part in t.split(',', '、', '，')) {
-            val p = part.trim()
-            val range = Regex("^(\\d+)\\s*[-–~至]\\s*(\\d+)$").find(p)
-            if (range != null) {
-                mask = mask or WeekUtils.maskFor(range.groupValues[1].toInt(), range.groupValues[2].toInt())
-            } else {
-                p.toIntOrNull()?.let { mask = mask or WeekUtils.maskFor(it) }
-            }
-        }
-        return mask
-    }
+    /** 支持 "1-16"、"1,3,5"、"1-16(单)"、"2-16(双)"、"单周"、"双周" 等（统一解析器） */
+    fun parseWeeks(text: String): Int = WeekUtils.parseWeeksText(text)
 }
