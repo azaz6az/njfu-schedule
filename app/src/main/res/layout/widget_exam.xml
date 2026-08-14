@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 2x2 考试倒计时小组件 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center_vertical"
+    android:background="@drawable/widget_bg"
+    android:padding="10dp">
+
+    <TextView
+        android:id="@+id/exam_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="下一场考试"
+        android:textColor="#8F8E86"
+        android:textSize="11sp" />
+
+    <TextView
+        android:id="@+id/exam_big"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:fontFamily="sans-serif-medium"
+        android:maxLines="1"
+        android:text="还有 X 天"
+        android:textColor="#4A4A44"
+        android:textSize="20sp" />
+
+    <TextView
+        android:id="@+id/exam_course"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="课程名 · MM月dd日"
+        android:textColor="#8F8E86"
+        android:textSize="11sp" />
+</LinearLayout>

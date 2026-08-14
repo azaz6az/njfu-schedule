@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 深邃夜间 · 深色 小组件背景（圆角 16dp） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#10161F" />
+    <corners android:radius="16dp" />
+</shape>

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 4x3 本周课表小组件：表头 + 7 列课程 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_bg"
+    android:padding="6dp">
+
+    <LinearLayout
+        android:id="@+id/header_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView android:id="@+id/day_label_1" style="@style/WidgetDayLabel" android:text="一" />
+        <TextView android:id="@+id/day_label_2" style="@style/WidgetDayLabel" android:text="二" />
+        <TextView android:id="@+id/day_label_3" style="@style/WidgetDayLabel" android:text="三" />
+        <TextView android:id="@+id/day_label_4" style="@style/WidgetDayLabel" android:text="四" />
+        <TextView android:id="@+id/day_label_5" style="@style/WidgetDayLabel" android:text="五" />
+        <TextView android:id="@+id/day_label_6" style="@style/WidgetDayLabel" android:text="六" />
+        <TextView android:id="@+id/day_label_7" style="@style/WidgetDayLabel" android:text="日" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/grid_row"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <LinearLayout android:id="@+id/day_col_1" style="@style/WidgetDayColumn" />
+        <LinearLayout android:id="@+id/day_col_2" style="@style/WidgetDayColumn" />
+        <LinearLayout android:id="@+id/day_col_3" style="@style/WidgetDayColumn" />
+        <LinearLayout android:id="@+id/day_col_4" style="@style/WidgetDayColumn" />
+        <LinearLayout android:id="@+id/day_col_5" style="@style/WidgetDayColumn" />
+        <LinearLayout android:id="@+id/day_col_6" style="@style/WidgetDayColumn" />
+        <LinearLayout android:id="@+id/day_col_7" style="@style/WidgetDayColumn" />
+    </LinearLayout>
+</LinearLayout>

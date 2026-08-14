@@ -43,7 +43,11 @@ object Routes {
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
 @Composable
-fun AppNav(db: AppDatabase) {
+fun AppNav(db: AppDatabase, initialTab: String? = null) {
+    val startDest = when (initialTab) {
+        "exam" -> Routes.EXAMS
+        else -> Routes.SCHEDULE
+    }
     val navController = rememberNavController()
     val tabs = listOf(
         Tab(Routes.SCHEDULE, "课表", Icons.AutoMirrored.Filled.List),
@@ -73,13 +77,14 @@ fun AppNav(db: AppDatabase) {
             }
         }
     ) { innerPadding ->
-        NavHost(navController, startDestination = Routes.SCHEDULE, modifier = Modifier.padding(innerPadding)) {
+        NavHost(navController, startDestination = startDest, modifier = Modifier.padding(innerPadding)) {
             composable(Routes.SCHEDULE) {
                 val vm: ScheduleViewModel = viewModel(factory = ScheduleViewModel.Factory(db))
                 ScheduleScreen(vm)
             }
             composable(Routes.EXAMS) {
-                val vm: ExamViewModel = viewModel(factory = ExamViewModel.Factory(db))
+                val context = LocalContext.current
+                val vm: ExamViewModel = viewModel(factory = ExamViewModel.Factory(db, context))
                 ExamScreen(vm, onAdd = { /* 考试添加已内联在 ExamScreen */ })
             }
             composable(Routes.SETTINGS) {

@@ -1,4 +1,10 @@
 <resources>
-    <!-- 深色模式下系统栏图标显示为浅色 -->
-    <style name="Theme.Schedule" parent="android:Theme.Material.NoActionBar" />
+    <!-- 启动页（深色）：深色背景 + 深色系统栏图标 -->
+    <style name="Theme.Schedule" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.Schedule.Main</item>
+    </style>
+
+    <style name="Theme.Schedule.Main" parent="android:Theme.Material.NoActionBar" />
 </resources>

@@ -31,6 +31,17 @@ object WeekUtils {
     fun contains(mask: Int, week: Int): Boolean =
         week in 1..MAX_WEEKS && (mask and (1 shl (week - 1))) != 0
 
+    /** 两门课是否时间冲突：同一天、周次掩码有交集、节次区间重叠（含部分重叠） */
+    fun overlaps(a: Course, b: Course): Boolean =
+        a.dayOfWeek == b.dayOfWeek &&
+            (a.weeks and b.weeks) != 0 &&
+            a.startPeriod <= b.endPeriod && b.startPeriod <= a.endPeriod
+
+    /** 候选课程与现有课程列表的冲突检测（编辑自身 id 相同的课程不算冲突） */
+    fun findConflicts(courses: List<Course>, candidate: Course): List<Course> =
+        courses.filter { it.id != candidate.id || candidate.id == 0L }
+            .filter { overlaps(it, candidate) }
+
     /** 学期起始日(周一)与今天的周差，从 1 开始；今天早于起始日返回 1 */
     fun currentWeek(start: LocalDate, today: LocalDate): Int {
         if (today.isBefore(start)) return 1

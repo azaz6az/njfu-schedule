@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 莫兰迪灰粉，与主题 primary 一致 -->
+    <color name="ic_launcher_background">#A88C8C</color>
+    <color name="splash_background">#FAFAF8</color>
+</resources>

@@ -24,12 +24,14 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import com.schedule.njfu.data.CourseMapper
 import com.schedule.njfu.model.Course
+import com.schedule.njfu.model.HolidayUtils
 import com.schedule.njfu.model.WeekUtils
 import java.time.LocalDate
 
@@ -63,12 +66,19 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
     val selectedWeek by viewModel.selectedWeek.collectAsStateWithLifecycle()
     val currentWeek by viewModel.currentWeek.collectAsStateWithLifecycle()
     val semesterStart by viewModel.semesterStart.collectAsStateWithLifecycle()
+    val shifts by viewModel.shifts.collectAsStateWithLifecycle()
     var dialog by remember { mutableStateOf<DialogState?>(null) }
+    var pendingAdd by remember { mutableStateOf<Course?>(null) }
 
     LaunchedEffect(Unit) { viewModel.initIfNeeded() }
 
-    val cells = remember(selectedWeek, courses) {
-        WeekGrid.cellsFor(courses, selectedWeek)
+    // 本周（selectedWeek）七天日期：调休映射依赖它
+    val weekDates = remember(selectedWeek, semesterStart) {
+        val monday = semesterStart.plusWeeks((selectedWeek - 1).toLong())
+        (0..6).map { monday.plusDays(it.toLong()) }
+    }
+    val cells = remember(selectedWeek, courses, weekDates, shifts) {
+        WeekGrid.cellsFor(courses, selectedWeek, weekDates, shifts)
     }
     // 今日日期：每分钟刷新一次，避免跨零点后高亮失效
     var today by remember { mutableStateOf(LocalDate.now()) }
@@ -79,7 +89,10 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
         }
     }
     val todayDay = today.dayOfWeek.value
+    // 调休：今天被映射到其他星期时，高亮映射后的列（如周六按周一）；映射为 0（放假）不高亮
+    val effectiveTodayDay = HolidayUtils.shiftedDayOfWeek(today, shifts)
     val isCurrentWeek = selectedWeek > 0 && selectedWeek == currentWeek
+    val highlightDay = if (effectiveTodayDay in 1..7) effectiveTodayDay else 0
 
     Box(Modifier.fillMaxSize()) {
         Column(
@@ -91,6 +104,8 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
                 selectedWeek = selectedWeek,
                 currentWeek = currentWeek,
                 semesterStart = semesterStart,
+                weekDates = weekDates,
+                shifts = shifts,
                 onPrev = { viewModel.selectWeek(selectedWeek - 1) },
                 onNext = { viewModel.selectWeek(selectedWeek + 1) },
                 onBackToCurrent = { viewModel.selectWeek(currentWeek) },
@@ -98,9 +113,16 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
             Box(Modifier.fillMaxWidth()) {
                 WeekGridContent(
                     cells = cells,
-                    todayDay = todayDay,
-                    highlightToday = isCurrentWeek,
-                    onCellClick = { day -> dialog = DialogState(null, day, selectedWeek) },
+                    todayDay = highlightDay,
+                    highlightToday = isCurrentWeek && highlightDay > 0,
+                    onCellClick = { day ->
+                        // 点击列加课：星期用该列日期映射后的星期（调休日按映射）
+                        dialog = DialogState(
+                            null,
+                            WeekGrid.mappedDayForColumn(day - 1, weekDates, shifts),
+                            selectedWeek,
+                        )
+                    },
                     onCourseClick = { c -> dialog = DialogState(c, c.dayOfWeek, selectedWeek) },
                 )
                 if (courses.isEmpty()) {
@@ -118,7 +140,12 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
             Spacer(Modifier.height(96.dp))
         }
         ExtendedFloatingActionButton(
-            onClick = { dialog = DialogState(null, todayDay, selectedWeek) },
+            onClick = {
+                // 默认落到「今天所在列」映射的星期（今天放假时用自然星期）
+                val fabDay = WeekGrid.mappedDayForColumn(todayDay - 1, weekDates, shifts)
+                    .let { if (it in 1..7) it else todayDay }
+                dialog = DialogState(null, fabDay, selectedWeek)
+            },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(16.dp),
@@ -138,8 +165,15 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
             weekDay = d.weekDay,
             weekNumber = d.weekNumber,
             onSave = { c ->
-                viewModel.addCourse(c)
-                dialog = null
+                // 冲突检测：与现有课程时间重叠时先确认再添加
+                val conflicts = WeekUtils.findConflicts(courses, c)
+                if (conflicts.isEmpty()) {
+                    viewModel.addCourse(c)
+                    dialog = null
+                } else {
+                    pendingAdd = c
+                    dialog = null
+                }
             },
             onDelete = d.course?.let { c ->
                 if (c.id > 0) {
@@ -149,6 +183,42 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
                 }
             },
             onDismiss = { dialog = null },
+        )
+    }
+    pendingAdd?.let { c ->
+        val conflicts = WeekUtils.findConflicts(courses, c)
+        AlertDialog(
+            onDismissRequest = { pendingAdd = null },
+            title = { Text("课程时间冲突") },
+            text = {
+                Column {
+                    Text("「${c.name}」与以下课程时间重叠（同一天同一时段有课）：")
+                    Spacer(Modifier.height(8.dp))
+                    conflicts.forEach { other ->
+                        Text(
+                            "• ${other.name}（周${DayLabels[other.dayOfWeek - 1]} " +
+                                "${other.startPeriod}-${other.endPeriod}节）",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "确认添加后两门课会在同一格并排显示。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.addCourse(c)
+                    pendingAdd = null
+                }) { Text("仍然添加") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingAdd = null }) { Text("返回修改") }
+            },
         )
     }
 }
@@ -164,6 +234,8 @@ private fun WeekSwitcher(
     selectedWeek: Int,
     currentWeek: Int,
     semesterStart: LocalDate,
+    weekDates: List<LocalDate>,
+    shifts: Map<LocalDate, Int>,
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onBackToCurrent: () -> Unit,
@@ -174,6 +246,11 @@ private fun WeekSwitcher(
         "${monday.monthValue}月${monday.dayOfMonth}日 – ${sunday.monthValue}月${sunday.dayOfMonth}日"
     } else {
         "${monday.year}年${monday.monthValue}月${monday.dayOfMonth}日 – ${sunday.year}年${sunday.monthValue}月${sunday.dayOfMonth}日"
+    }
+    // 本周调休提示：如「周六按周一」
+    val shiftHints = weekDates.mapNotNull { d ->
+        val target = shifts[d]
+        if (target != null) "${d.monthValue}月${d.dayOfMonth}日（${DayLabels[target - 1]}）按周${DayLabels[target - 1]}显示" else null
     }
 
     Row(
@@ -189,7 +266,7 @@ private fun WeekSwitcher(
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                rangeText,
+                rangeText + if (shiftHints.isEmpty()) "" else " · " + shiftHints.joinToString("、"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

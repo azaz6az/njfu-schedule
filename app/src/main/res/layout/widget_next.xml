@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 4x1 下一节课小组件：subtitle / big / courseLine 三段竖排 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_bg"
+    android:paddingLeft="14dp"
+    android:paddingTop="8dp"
+    android:paddingRight="14dp"
+    android:paddingBottom="8dp">
+
+    <TextView
+        android:id="@+id/next_subtitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="下一节课 · 第N周 周X"
+        android:textColor="#8F8E86"
+        android:textSize="11sp" />
+
+    <TextView
+        android:id="@+id/next_big"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
+        android:maxLines="1"
+        android:text="距上课 X 分钟"
+        android:textColor="#4A4A44"
+        android:textSize="22sp" />
+
+    <TextView
+        android:id="@+id/next_course_line"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="课程名 · 地点"
+        android:textColor="#8F8E86"
+        android:textSize="12sp" />
+</LinearLayout>

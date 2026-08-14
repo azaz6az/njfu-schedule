@@ -7,12 +7,14 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.schedule.njfu.MainActivity
 import com.schedule.njfu.data.AppDatabase
 import com.schedule.njfu.data.SettingsKeys
 import com.schedule.njfu.data.semesterStart
 import com.schedule.njfu.model.Course
+import com.schedule.njfu.model.HolidayUtils
 import com.schedule.njfu.model.WeekUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -44,13 +46,22 @@ class ReminderReceiver : BroadcastReceiver() {
 
 object ReminderScheduler {
 
-    /** 为指定周的所有课程安排当天提醒 */
-    fun scheduleDay(context: Context, courses: List<Course>, week: Int, minutesBefore: Int) {
+    /** 为指定周的所有课程安排当天提醒；[shifts] 为调休映射（日期 → 按周几上课） */
+    fun scheduleDay(
+        context: Context,
+        courses: List<Course>,
+        week: Int,
+        minutesBefore: Int,
+        shifts: Map<LocalDate, Int> = emptyMap(),
+    ) {
         val am = context.getSystemService(AlarmManager::class.java)
         val today = LocalDate.now()
         val times = loadPeriodTimes(context)
+        // 调休：今天按映射星期上课（如周六补周一的课，则提醒周一的课程）；映射为 0 表示放假无课
+        val effectiveDay = HolidayUtils.shiftedDayOfWeek(today, shifts)
+        if (effectiveDay !in 1..7) return
         courses
-            .filter { it.dayOfWeek == today.dayOfWeek.value && WeekUtils.contains(it.weeks, week) }
+            .filter { it.dayOfWeek == effectiveDay && WeekUtils.contains(it.weeks, week) }
             .forEach { course ->
                 val start = WeekUtils.startTimeOf(course.startPeriod, times)
                 if (start.isBlank()) return@forEach
@@ -64,8 +75,14 @@ object ReminderScheduler {
                         .putExtra("course_name", course.name)
                         .putExtra("location", course.location),
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pi)
+                setExactSafely(am, trigger, pi)
             }
+    }
+
+    /** Android 12+ 需「闹钟与提醒」授权才能精确闹钟；未授权/抛 SecurityException 时静默跳过 */
+    private fun setExactSafely(am: AlarmManager, trigger: Long, pi: PendingIntent) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) return
+        runCatching { am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pi) }
     }
 
     fun loadPeriodTimes(context: Context): List<Pair<Int, String>> {
@@ -94,8 +111,9 @@ object ReminderScheduler {
         val start = db.settingsDao().semesterStart()
         val week = WeekUtils.currentWeek(start, LocalDate.now())
         val minutes = db.settingsDao().get(SettingsKeys.REMIND_MINUTES)?.toIntOrNull() ?: 10
+        val shifts = HolidayUtils.parseShifts(db.settingsDao().get(SettingsKeys.HOLIDAY_SHIFTS))
         val courses = db.courseDao().getAll().map { it.toModel() }
-        scheduleDay(context, courses, week, minutes)
+        scheduleDay(context, courses, week, minutes, shifts)
     }
 }
 
@@ -109,6 +127,7 @@ class BootReceiver : BroadcastReceiver() {
         scope.launch {
             try {
                 ReminderScheduler.rescheduleToday(context)
+                ExamReminderScheduler.rescheduleExams(context)
             } finally {
                 pending.finish()
             }

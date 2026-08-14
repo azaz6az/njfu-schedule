@@ -8,7 +8,14 @@ object SettingsKeys {
     const val SEMESTER_START = "semester_start"        // ISO 日期，学期第一周的周一
     const val REMIND_MINUTES = "remind_minutes"        // "5"|"10"|"15"
     const val PERIOD_TIMES = "period_times"            // JSON: [{"p":1,"t":"08:00"},...]
+    const val EXAM_REMIND_ENABLED = "exam_remind_enabled" // "1"|"0"，默认 1（开启）
+    const val EXAM_REMIND_DAYS = "exam_remind_days"    // "1"|"2"|"3"|"7"，默认 "1"
+    const val HOLIDAY_SHIFTS = "holiday_shifts"        // JSON: {"2025-10-11":1,...} 调休日按周几显示
+    const val WIDGET_THEME = "widget_theme"            // "morandi"|"fresh"|"deep"，默认 morandi
 }
+
+/** 小组件主题键，默认 morandi */
+suspend fun SettingsDao.widgetTheme(): String = get(SettingsKeys.WIDGET_THEME) ?: "morandi"
 
 suspend fun SettingsDao.semesterStart(): LocalDate {
     val v = get(SettingsKeys.SEMESTER_START) ?: return defaultSemesterStart()

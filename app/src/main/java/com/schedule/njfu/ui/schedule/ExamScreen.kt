@@ -1,5 +1,6 @@
 package com.schedule.njfu.ui.schedule
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +39,7 @@ import java.time.temporal.ChronoUnit
 fun ExamScreen(viewModel: ExamViewModel, onAdd: () -> Unit) {
     val exams by viewModel.exams.collectAsStateWithLifecycle()
     var showDialog by remember { mutableStateOf(false) }
+    var deleteTarget by remember { mutableStateOf<Exam?>(null) }
 
     Column(Modifier.fillMaxSize()) {
         // 标题区 + 副标题（共 N 门 · 最近一场 X 天后）
@@ -86,7 +88,7 @@ fun ExamScreen(viewModel: ExamViewModel, onAdd: () -> Unit) {
                     .fillMaxWidth(),
                 contentPadding = PaddingValues(vertical = 8.dp),
             ) {
-                items(exams, key = { it.id }) { exam -> ExamRow(exam) }
+                items(exams, key = { it.id }) { exam -> ExamRow(exam, onClick = { deleteTarget = exam }) }
             }
         }
         Button(
@@ -109,10 +111,24 @@ fun ExamScreen(viewModel: ExamViewModel, onAdd: () -> Unit) {
             onDismiss = { showDialog = false },
         )
     }
+    deleteTarget?.let { exam ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("删除考试") },
+            text = { Text("确定删除「${exam.name}」的考试安排？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteExam(exam.id)
+                    deleteTarget = null
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("取消") } },
+        )
+    }
 }
 
 @Composable
-private fun ExamRow(exam: Exam) {
+private fun ExamRow(exam: Exam, onClick: () -> Unit) {
     // 临近 7 天（含今天）高亮，已过期置灰
     val days = runCatching {
         ChronoUnit.DAYS.between(LocalDate.now(), LocalDate.parse(exam.date))
@@ -138,7 +154,8 @@ private fun ExamRow(exam: Exam) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         colors = colors,

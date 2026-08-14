@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.schedule.njfu.data.AppDatabase
 import com.schedule.njfu.ui.navigation.AppNav
 import com.schedule.njfu.ui.theme.ScheduleTheme
@@ -19,11 +20,12 @@ class MainActivity : ComponentActivity() {
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* 结果忽略，用户可稍后再授权 */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         requestNotificationPermissionIfNeeded()
         setContent {
             ScheduleTheme {
-                AppNav(AppDatabase.get(this))
+                AppNav(AppDatabase.get(this), initialTab = intent.getStringExtra("start_tab"))
             }
         }
     }

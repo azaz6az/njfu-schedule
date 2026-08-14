@@ -115,4 +115,81 @@ class WeekGridTest {
         assertEquals(colOfB, colOfC) // B、C 同列上下排
     }
 
+    // ---- 调休映射 ----
+
+    @Test
+    fun `shifted day shows courses in mapped column`() {
+        // 2025-10-11（周六）映射为周一（顶替）：周一课程显示在周六列（col=5）
+        val c = course("高数", day = 1, start = 1, end = 2, weeks = WeekUtils.maskFor(1, 16))
+        val weekDates = (0..6).map { java.time.LocalDate.parse("2025-10-06").plusDays(it.toLong()) }
+        val shifts = mapOf(java.time.LocalDate.parse("2025-10-11") to 1)
+        val cells = WeekGrid.cellsFor(listOf(c), week = 1, weekDates = weekDates, shifts = shifts)
+        assertEquals(1, cells.size)
+        // col 0 基：周六 = 第 6 列
+        assertEquals(5, cells[0].col)
+    }
+
+    @Test
+    fun `mapped day replaces natural column`() {
+        // 10-11 顶替周一后，自然周一列（10-06）不再显示周一课程
+        val c = course("高数", day = 1, start = 1, end = 2, weeks = WeekUtils.maskFor(1, 16))
+        val weekDates = (0..6).map { java.time.LocalDate.parse("2025-10-06").plusDays(it.toLong()) }
+        val shifts = mapOf(java.time.LocalDate.parse("2025-10-11") to 1)
+        // 周一课程只在映射日显示，共 1 个 cell 且位于第 6 列
+        val cells = WeekGrid.cellsFor(listOf(c), week = 1, weekDates = weekDates, shifts = shifts)
+        assertEquals(1, cells.size)
+        assertEquals(5, cells[0].col)
+    }
+
+    @Test
+    fun `day mapped to zero shows no courses`() {
+        // 10-08（周三）设为放假：周三课程本周不显示
+        val c = course("英语", day = 3, start = 1, end = 2, weeks = WeekUtils.maskFor(1, 16))
+        val weekDates = (0..6).map { java.time.LocalDate.parse("2025-10-06").plusDays(it.toLong()) }
+        val shifts = mapOf(java.time.LocalDate.parse("2025-10-08") to 0)
+        val cells = WeekGrid.cellsFor(listOf(c), week = 1, weekDates = weekDates, shifts = shifts)
+        assertEquals(0, cells.size)
+    }
+
+    @Test
+    fun `unmapped week keeps natural column`() {
+        val c = course("高数", day = 1, start = 1, end = 2, weeks = WeekUtils.maskFor(1, 16))
+        val weekDates = (0..6).map { java.time.LocalDate.parse("2025-10-06").plusDays(it.toLong()) }
+        val cells = WeekGrid.cellsFor(listOf(c), week = 1, weekDates = weekDates, shifts = emptyMap())
+        assertEquals(0, cells[0].col) // 周一 → 第 1 列
+    }
+
+    @Test
+    fun `mapped and natural courses share column with overlap split`() {
+        // 两门周一课程都被顶替到周六列且节次重叠 → 并排
+        val mon = course("高数", day = 1, start = 1, end = 2, weeks = WeekUtils.maskFor(1, 16))
+        val mon2 = course("线代", day = 1, start = 1, end = 2, weeks = WeekUtils.maskFor(1, 16))
+        val weekDates = (0..6).map { java.time.LocalDate.parse("2025-10-06").plusDays(it.toLong()) }
+        val shifts = mapOf(java.time.LocalDate.parse("2025-10-11") to 1)
+        val cells = WeekGrid.cellsFor(listOf(mon, mon2), week = 1, weekDates = weekDates, shifts = shifts)
+        assertEquals(2, cells.size)
+        assertEquals(2, cells.maxOf { it.overlapCount })
+        assertEquals(5, cells.minOf { it.col })
+    }
+
+    @Test
+    fun `empty week dates fall back to natural columns`() {
+        // 不传 weekDates（旧调用方）时行为不变
+        val c = course("高数", day = 6, start = 1, end = 2, weeks = WeekUtils.maskFor(1, 16))
+        val cells = WeekGrid.cellsFor(listOf(c), week = 1, shifts = mapOf(java.time.LocalDate.parse("2025-10-11") to 1))
+        assertEquals(5, cells[0].col)
+    }
+
+    @Test
+    fun `mapped day for column returns shifted weekday`() {
+        val weekDates = (0..6).map { java.time.LocalDate.parse("2025-10-06").plusDays(it.toLong()) }
+        val shifts = mapOf(java.time.LocalDate.parse("2025-10-11") to 1)
+        // 周六列 → 周一
+        assertEquals(1, WeekGrid.mappedDayForColumn(5, weekDates, shifts))
+        // 周一列（未映射）→ 周一
+        assertEquals(1, WeekGrid.mappedDayForColumn(0, weekDates, shifts))
+        // 周四列 → 周四
+        assertEquals(4, WeekGrid.mappedDayForColumn(3, weekDates, shifts))
+    }
+
 }
