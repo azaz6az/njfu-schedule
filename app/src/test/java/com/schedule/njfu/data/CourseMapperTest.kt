@@ -57,4 +57,36 @@ class CourseMapperTest {
         assertEquals(custom, CourseMapper.displayColor(custom))
     }
 
+
+    @Test
+    fun `displayColor darkens any too light color so white text stays readable`() {
+        // JSON 备份导入可能携带任意浅色（白/浅黄/浅粉等）：必须兜底映射到深色板，
+        // 否则浅底+白字 = 看起来是白色卡片、看不到课程文字
+        val tooLight = listOf(
+            0xFFFFFFFF.toInt(), // 纯白
+            0xFFFFF8E1.toInt(), // 浅黄
+            0xFFFFE4E1.toInt(), // 浅粉
+            0xFFF0F0F0.toInt(), // 浅灰
+            0xFFE8F5E9.toInt(), // 浅绿
+            0xFFF3E5F5.toInt(), // 浅紫
+        )
+        for (raw in tooLight) {
+            val mapped = CourseMapper.displayColor(raw)
+            assertTrue("浅色 0x" + raw.toString(16) + " 未兜底映射", CourseMapper.isPaletteColor(mapped))
+            // 兜底结果必须是可读深色：白字对比度 >= 4.5:1
+            assertTrue(
+                "0x" + raw.toString(16) + " -> 0x" + mapped.toString(16) + " 白字对比度不足",
+                CourseMapper.whiteTextContrastOk(mapped),
+            )
+        }
+    }
+
+    @Test
+    fun `displayColor passes through sufficiently dark custom colors`() {
+        // 深色自定义色（如 0xFF123456 深蓝）保持原样，不强行改用户选择
+        val dark = 0xFF123456.toInt()
+        assertEquals(dark, CourseMapper.displayColor(dark))
+        assertTrue(CourseMapper.whiteTextContrastOk(dark))
+    }
+
 }
