@@ -29,6 +29,7 @@ class CasLoginActivity : ComponentActivity() {
         const val EXTRA_SUCCESS_HOST_PREFIXES = "extra_success_host_prefixes"
         const val EXTRA_SUCCESS_COOKIE_MARKER = "extra_success_cookie_marker"
         const val EXTRA_SUCCESS_URL_BLACKLIST = "extra_success_url_blacklist"
+        const val EXTRA_USER_AGENT = "extra_user_agent"
     }
 
     private var done = false
@@ -44,6 +45,10 @@ class CasLoginActivity : ComponentActivity() {
             ?.takeIf { it.isNotEmpty() } ?: School.NJFU.successCookieMarker
         val urlBlacklist = intent.getStringArrayListExtra(EXTRA_SUCCESS_URL_BLACKLIST)
             ?.takeIf { it.isNotEmpty() } ?: School.NJFU.successUrlBlacklist
+        // UA 规则：未传 extra → 桌面 UA（历史默认，南林 CAS 必需）；
+        // 传空串 → 系统默认移动 UA（正方 jwglxt 手机版自适应页）；
+        // 传非空 → 按学校指定。
+        val userAgentExtra = intent.getStringExtra(EXTRA_USER_AGENT)
 
         val webView = WebView(this)
         webView.layoutParams = ViewGroup.LayoutParams(
@@ -53,8 +58,17 @@ class CasLoginActivity : ComponentActivity() {
             javaScriptEnabled = true
             domStorageEnabled = true
             mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-            // 桌面 UA：移动 UA 会拿到精简版登录页（表单字段缺失）
-            userAgentString = CasLoginClient.BROWSER_UA
+            when {
+                userAgentExtra == null -> userAgentString = CasLoginClient.BROWSER_UA
+                userAgentExtra.isNotEmpty() -> userAgentString = userAgentExtra
+                else -> Unit // 空串：保持系统默认（移动 UA）
+            }
+            // 触屏可用性：允许双指缩放、按屏宽排版，手机页/桌面页都能操作
+            setSupportZoom(true)
+            builtInZoomControls = true
+            displayZoomControls = false
+            useWideViewPort = true
+            loadWithOverviewMode = true
         }
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {

@@ -224,6 +224,11 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
                             CasLoginActivity.EXTRA_SUCCESS_URL_BLACKLIST,
                             ArrayList(selectedSchool.successUrlBlacklist),
                         )
+                        // 空串 = 系统默认移动 UA（广西大学手机版登录页）；南林传桌面 UA
+                        intent.putExtra(
+                            CasLoginActivity.EXTRA_USER_AGENT,
+                            selectedSchool.userAgent ?: "",
+                        )
                         casLauncher.launch(intent)
                     },
                     enabled = !loading && (selectedSchool != School.GXU || (xnm.isNotEmpty() && xqm.isNotEmpty())),
