@@ -33,6 +33,11 @@ class NextClassWidgetProvider : AppWidgetProvider() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 ids.forEach { id -> updateWidget(context, manager, id) }
+                // 说明：此处与 ensureScheduled 会各查一遍库（buildViews 读 course/period，
+                // ensureScheduled 内部再算一次 nextRefreshAt）。为复用需把 courses/week/periodMap
+                // 从 buildViews 提升并改变 ensureScheduled 签名，会影响 BootReceiver 依赖的
+                // ensureScheduled(context) 契约。权衡后保留重复查库（仅额外一次轻量查询），
+                // 换取跨模块契约稳定。如后续可接受签名变更再优化。
                 WidgetRefreshScheduler.ensureScheduled(context)
             } catch (t: Throwable) {
                 DebugLog.write(context, "NextClassWidget render FAILED", t)
@@ -81,23 +86,30 @@ class NextClassWidgetProvider : AppWidgetProvider() {
         views.setTextColor(R.id.next_subtitle, palette.textSecondary)
         views.setTextColor(R.id.next_course_line, palette.textSecondary)
 
-        views.setTextViewText(R.id.next_subtitle, "下一节课 · 第${state.week}周 周${state.today}")
+        views.setTextViewText(
+            R.id.next_subtitle,
+            context.getString(
+                R.string.widget_next_subtitle,
+                state.week,
+                context.getString(state.todayRes),
+            ),
+        )
 
         when (state.phase) {
             WidgetData.NextClassPhase.BEFORE -> {
-                views.setTextViewText(R.id.next_big, "距上课 ${state.minutes} 分钟")
+                views.setTextViewText(R.id.next_big, context.getString(R.string.widget_next_before, state.minutes))
                 views.setTextColor(R.id.next_big, palette.accent)
             }
             WidgetData.NextClassPhase.IN_PROGRESS -> {
-                views.setTextViewText(R.id.next_big, "上课中 · 距下课 ${state.minutes} 分钟")
+                views.setTextViewText(R.id.next_big, context.getString(R.string.widget_next_in_progress, state.minutes))
                 views.setTextColor(R.id.next_big, palette.textPrimary)
             }
             WidgetData.NextClassPhase.AFTER -> {
-                views.setTextViewText(R.id.next_big, "今天课已上完")
+                views.setTextViewText(R.id.next_big, context.getString(R.string.widget_next_after))
                 views.setTextColor(R.id.next_big, palette.textPrimary)
             }
             WidgetData.NextClassPhase.NO_CLASS_TODAY -> {
-                views.setTextViewText(R.id.next_big, "今日无课")
+                views.setTextViewText(R.id.next_big, context.getString(R.string.widget_next_no_class))
                 views.setTextColor(R.id.next_big, palette.textPrimary)
             }
         }

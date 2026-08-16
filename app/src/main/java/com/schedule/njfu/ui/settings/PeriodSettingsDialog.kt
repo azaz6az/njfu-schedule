@@ -20,7 +20,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.schedule.njfu.R
 import com.schedule.njfu.reminder.ReminderScheduler
 
 /** HH:mm（如 08:00、21:30） */
@@ -43,7 +45,7 @@ fun PeriodSettingsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("节次时间段") },
+        title = { Text(stringResource(R.string.settings_period_times)) },
         text = {
             Column(
                 Modifier
@@ -54,7 +56,7 @@ fun PeriodSettingsDialog(
                 values.forEachIndexed { index, value ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "第 ${index + 1} 节",
+                            stringResource(R.string.settings_period_format_hint, index + 1),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.width(64.dp),
                         )
@@ -72,7 +74,7 @@ fun PeriodSettingsDialog(
                 }
                 if (error) {
                     Text(
-                        "时间格式须为 HH:mm（如 08:00、21:30），请修正后保存",
+                        stringResource(R.string.settings_period_error),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -88,10 +90,10 @@ fun PeriodSettingsDialog(
                         error = true
                     }
                 },
-            ) { Text("保存") }
+            ) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         },
     )
 }

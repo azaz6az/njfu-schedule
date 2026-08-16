@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  API 30- 传统备份（fullBackupContent）规则。
+  排除本地课表数据库 schedule.db 与登录凭据 credentials；其余设置可备份。
+-->
+<full-backup-content>
+    <exclude
+        domain="database"
+        path="schedule.db" />
+    <exclude
+        domain="sharedpref"
+        path="credentials.xml" />
+</full-backup-content>

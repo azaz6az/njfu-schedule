@@ -32,8 +32,14 @@ object HttpSession {
         }
 
         override fun loadForRequest(url: HttpUrl): List<Cookie> =
-            cookies[url.host]?.filter { it.matches(url) } ?: emptyList()
+            cookies[url.host]
+                ?.filter { it.matches(url) && !isExpired(it) }
+                ?: emptyList()
     }
+
+    /** Cookie 是否已过期：expiresAt 非 0 且早于当前时间（0 表示会话 Cookie，永不过期） */
+    private fun isExpired(cookie: Cookie): Boolean =
+        cookie.expiresAt != 0L && cookie.expiresAt < System.currentTimeMillis()
 
     val client: OkHttpClient by lazy {
         OkHttpClient.Builder().cookieJar(cookieJar)

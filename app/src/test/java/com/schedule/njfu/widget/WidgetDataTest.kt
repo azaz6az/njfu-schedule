@@ -1,5 +1,6 @@
 package com.schedule.njfu.widget
 
+import com.schedule.njfu.R
 import com.schedule.njfu.model.Course
 import com.schedule.njfu.model.Exam
 import com.schedule.njfu.model.WeekUtils
@@ -220,14 +221,14 @@ class WidgetDataTest {
         assertEquals(0, days)
     }
 
-    // ---- 星期中文名 ----
+    // ---- 星期中文名资源 id ----
 
     @Test
-    fun `day name cn`() {
-        assertEquals("一", WidgetData.dayNameCn(1))
-        assertEquals("五", WidgetData.dayNameCn(5))
-        assertEquals("日", WidgetData.dayNameCn(7))
-        assertEquals("", WidgetData.dayNameCn(0))
-        assertEquals("", WidgetData.dayNameCn(8))
+    fun `day name res maps to weekday string resources`() {
+        assertEquals(R.string.weekday_mon, WidgetData.dayNameRes(1))
+        assertEquals(R.string.weekday_fri, WidgetData.dayNameRes(5))
+        assertEquals(R.string.weekday_sun, WidgetData.dayNameRes(7))
+        assertEquals(0, WidgetData.dayNameRes(0))
+        assertEquals(0, WidgetData.dayNameRes(8))
     }
 }

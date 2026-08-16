@@ -1,5 +1,6 @@
 package com.schedule.njfu.data
 
+import androidx.room.withTransaction
 import com.schedule.njfu.model.Course
 import com.schedule.njfu.model.Exam
 
@@ -21,11 +22,20 @@ class ScheduleRepository(
     val courses = db.courseDao().observeAll()
 
     suspend fun replaceAll(courses: List<Course>, exams: List<Exam> = emptyList()) {
-        db.courseDao().clear()
-        db.courseDao().upsertAll(courses.map { it.toEntity() })
+        // 课程与考试按各自的原子事务替换整表。
+        // 把「clear + upsertAll」包进 withTransaction，避免中途失败时数据被部分清空；
+        // 同时事务内先清后插只对同一事务外的观察者暴露最终态，小组件不会闪空。
+        db.withTransaction {
+            db.courseDao().clear()
+            db.courseDao().upsertAll(courses.map { it.toEntity() })
+        }
+        // exams 为空时【不触碰】exams 表：手动导入课表不应顺带清空已手动录入的考试安排。
+        // 仅在调用方显式提供考试数据时才整体替换 exams。
         if (exams.isNotEmpty()) {
-            db.examDao().clear()
-            db.examDao().upsertAll(exams.map { it.toEntity() })
+            db.withTransaction {
+                db.examDao().clear()
+                db.examDao().upsertAll(exams.map { it.toEntity() })
+            }
         }
     }
 

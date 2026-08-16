@@ -77,7 +77,12 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
         val today = LocalDate.now()
         views.setTextViewText(
             R.id.header_text,
-            "周${WidgetData.dayNameCn(today.dayOfWeek.value)} · 第${week}周 · ${courses.size}节课",
+            context.getString(
+                R.string.widget_courses_header,
+                context.getString(WidgetData.dayNameRes(today.dayOfWeek.value)),
+                week,
+                courses.size,
+            ),
         )
         if (courses.isEmpty()) {
             views.setViewVisibility(R.id.empty_text, View.VISIBLE)
@@ -98,7 +103,13 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
 
     private fun courseItem(context: Context, course: Course): RemoteViews {
         val rawColor = if (course.color == 0) CourseMapper.colorFor(course.name) else course.color
-        val text = "${course.startPeriod}-${course.endPeriod}节 ${course.name} ${course.location}".trim()
+        val text = context.getString(
+            R.string.widget_course_line,
+            course.startPeriod,
+            course.endPeriod,
+            course.name,
+            course.location,
+        ).trim()
         val item = RemoteViews(context.packageName, R.layout.widget_course_item)
         item.setTextViewText(R.id.course_text, text)
         item.setInt(R.id.course_item, "setBackgroundColor", CourseMapper.displayColor(rawColor))

@@ -14,6 +14,7 @@ import com.schedule.njfu.model.WeekUtils
 import com.schedule.njfu.util.DebugLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -36,6 +37,16 @@ import java.time.temporal.ChronoUnit
 object WidgetRefreshScheduler {
 
     private const val REQUEST_CODE = 0x5A30   // 固定 requestCode，便于 cancel
+
+    /** 倒计时窗口逐分钟档的触发间隔/容忍窗口：60 秒 */
+    private const val COUNTDOWN_WINDOW_MS = 60_000L
+
+    /**
+     * 判定「倒计时逐分钟档」的时间余量阈值。
+     * 逐分钟档的触发间隔约 60s；窗口外最近档至少 60min。取 2 分钟作为分界，
+     * 既精确区分两档，又容忍 IO 线程取时的毫秒级抖动，避免边界误判成精确闹钟档。
+     */
+    private const val PER_MINUTE_SPAN_MS = 120_000L
 
     /**
      * 纯时间计算（可 JVM 单测）：下一次应刷新的时间点。
@@ -90,17 +101,21 @@ object WidgetRefreshScheduler {
 
     /**
      * 重新计算并设置下一次刷新闹钟。内部读库 + 起协程，可在主线程安全调用。
+     * 非挂起函数：每次调用自行创建独立顶层协程作用域（SupervisorJob + Dispatchers.IO），
+     * 不被调用方（如 BootReceiver / AppWidgetProvider.onUpdate）的生命周期绑定，
+     * 即便调用方在 onReceive/onUpdate 结束后回收，调度计算仍会完整完成。
      * 仅当 4x1 实例存在时调度；实例不存在则取消挂起闹钟并返回。
      */
     fun ensureScheduled(context: Context) {
         val appContext = context.applicationContext
-        CoroutineScope(Dispatchers.IO).launch {
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 val manager = AppWidgetManager.getInstance(appContext)
                 val ids = manager.getAppWidgetIds(
                     ComponentName(appContext, NextClassWidgetProvider::class.java),
                 )
                 if (ids.isEmpty()) {
+                    // 无实例：停表/取消尚未触发的后续闹钟，避免空转逐分钟调度
                     cancelAll(appContext)
                     return@launch
                 }
@@ -134,10 +149,19 @@ object WidgetRefreshScheduler {
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pi = updatePendingIntent(context, instanceIds)
         runCatching {
-            val exact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-                am.canScheduleExactAlarms()
-            if (exact) am.setExactAndAllowWhileIdle(AlarmManager.RTC, triggerAtMillis, pi)
-            else am.setAndAllowWhileIdle(AlarmManager.RTC, triggerAtMillis, pi)
+            // 倒计时窗口内逐分钟档：nextRefreshAt 返回下一分钟整点，触发与 now 的间隔 ≤ 约 60s。
+            // 这里用 setWindow(RTC_WAKEUP, trigger, 60_000)：允许 Doze 聚合、容忍 ≤1 分钟漂移，
+            // 且无需 exact alarm 权限，属「允许的」窗口式闹钟。
+            val inCountdownWindow = triggerAtMillis - System.currentTimeMillis() <= PER_MINUTE_SPAN_MS
+            if (inCountdownWindow) {
+                am.setWindow(AlarmManager.RTC_WAKEUP, triggerAtMillis, COUNTDOWN_WINDOW_MS, pi)
+            } else {
+                // 窗口外常规档位：上课前 60 分钟 / 次日 08:00 / 数据变更后的一次性重排。
+                val exact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                    am.canScheduleExactAlarms()
+                if (exact) am.setExactAndAllowWhileIdle(AlarmManager.RTC, triggerAtMillis, pi)
+                else am.setAndAllowWhileIdle(AlarmManager.RTC, triggerAtMillis, pi)
+            }
         }
     }
 

@@ -62,7 +62,7 @@ object CasLoginClient {
             .url(captchaUrl)
             .header("User-Agent", BROWSER_UA)
             .build())
-            .execute().use { it.body!!.string().trim() == "true" }
+            .execute().use { it.body?.string().orEmpty().trim() == "true" }
         if (needCaptcha) {
             throw CaptchaRequiredException(page)   // UI 层捕获后展示验证码输入
         }
@@ -86,7 +86,7 @@ object CasLoginClient {
             .url("${originOf(baseUrl)}/authserver/captcha.html")
             .header("User-Agent", BROWSER_UA)
             .build())
-            .execute().use { it.body!!.bytes() }
+            .execute().use { it.body?.bytes() ?: throw IllegalStateException("验证码接口未返回数据") }
     }
 
     /**
@@ -109,7 +109,7 @@ object CasLoginClient {
             }
             throw IllegalStateException("登录页请求异常重定向（HTTP $code → $location）")
         }
-        val pageHtml = resp.body!!.string()
+        val pageHtml = resp.body?.string().orEmpty()
         val page = parseLoginPage(pageHtml)
         if (page.lt.isBlank()) {
             // 带页面诊断信息，便于定位是 302/验证页/改版
@@ -159,17 +159,20 @@ object CasLoginClient {
         } else {
             val body = response.body?.string().orEmpty()
             when {
-                body.contains("您提供的用户名或者密码有误") || body.contains("用户名或密码错误") ->
+                // 精确特征匹配，避免把任意含"用户名"的响应误报为密码错误
+                body.contains("您提供的用户名或者密码有误") ||
+                    body.contains("用户名或密码错误") ||
+                    body.contains("密码错误") ||
+                    Regex("id=\"msg\"").containsMatchIn(body) &&
+                        body.contains("用户名") ->
                     throw IllegalArgumentException("用户名或密码错误")
-                body.contains("验证码") ->
+                body.contains("验证码") && (Regex("id=\"msg\"").containsMatchIn(body) || body.contains("验证码错误")) ->
                     throw IllegalStateException("验证码错误或已过期，请重新输入")
                 body.contains("认证服务不可用") ->
                     throw IllegalStateException("教务系统认证服务暂时不可用，请稍后再试")
-                body.contains("用户名") ->
-                    throw IllegalArgumentException("用户名或密码错误")
                 else -> {
                     val head = body.take(200).replace('\n', ' ')
-                    throw IllegalStateException("登录失败：HTTP ${response.code}（响应：$head）")
+                    throw IllegalStateException("登录失败，请检查网络后重试（HTTP ${response.code}：$head）")
                 }
             }
         }

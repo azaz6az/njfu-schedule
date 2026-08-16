@@ -1,6 +1,8 @@
 package com.schedule.njfu
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.os.Build
 import com.schedule.njfu.reminder.ExamReminderScheduler
 import com.schedule.njfu.reminder.ReminderScheduler
@@ -30,9 +32,27 @@ class App : Application() {
                 "sdk=${Build.VERSION.SDK_INT} device=${Build.MANUFACTURER} ${Build.MODEL}",
         )
         WidgetRefreshWorker.schedule(this)
+        createNotificationChannels()
         applicationScope.launch {
             ReminderScheduler.rescheduleToday(this@App)
             ExamReminderScheduler.rescheduleExams(this@App)
         }
+    }
+
+    /** 统一创建提醒渠道，避免各 Receiver 重复创建 */
+    private fun createNotificationChannels() {
+        val nm = getSystemService(NotificationManager::class.java)
+        val schedule = NotificationChannel(
+            "schedule",
+            getString(R.string.notification_channel_schedule),
+            NotificationManager.IMPORTANCE_HIGH,
+        )
+        val exam = NotificationChannel(
+            "exams",
+            getString(R.string.notification_channel_exams),
+            NotificationManager.IMPORTANCE_HIGH,
+        )
+        nm.createNotificationChannel(schedule)
+        nm.createNotificationChannel(exam)
     }
 }

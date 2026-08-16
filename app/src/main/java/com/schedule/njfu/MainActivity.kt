@@ -1,6 +1,7 @@
 package com.schedule.njfu
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -17,7 +18,14 @@ class MainActivity : ComponentActivity() {
 
     /** Android 13+ 通知运行时权限：课前提醒依赖它，首次进入时请求 */
     private val notificationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* 结果忽略，用户可稍后再授权 */ }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            // 记录请求结果，供后续排查与设置页引导
+            getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_NOTIFICATION_REQUESTED, true)
+                .putBoolean(KEY_NOTIFICATION_GRANTED, granted)
+                .apply()
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
@@ -38,5 +46,11 @@ class MainActivity : ComponentActivity() {
         if (!granted) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+    }
+
+    private companion object {
+        const val PREFS_NAME = "prefs"
+        const val KEY_NOTIFICATION_REQUESTED = "notification_permission_requested"
+        const val KEY_NOTIFICATION_GRANTED = "notification_permission_granted"
     }
 }

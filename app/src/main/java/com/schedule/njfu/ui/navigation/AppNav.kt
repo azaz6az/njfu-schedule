@@ -17,12 +17,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.schedule.njfu.R
 import com.schedule.njfu.data.AppDatabase
 import com.schedule.njfu.ui.import.ImportViewModel
 import com.schedule.njfu.ui.import.ImportWizardScreen
@@ -40,7 +42,7 @@ object Routes {
     const val IMPORT = "import"
 }
 
-private data class Tab(val route: String, val label: String, val icon: ImageVector)
+private data class Tab(val route: String, val labelRes: Int, val icon: ImageVector)
 
 @Composable
 fun AppNav(db: AppDatabase, initialTab: String? = null) {
@@ -50,10 +52,10 @@ fun AppNav(db: AppDatabase, initialTab: String? = null) {
     }
     val navController = rememberNavController()
     val tabs = listOf(
-        Tab(Routes.SCHEDULE, "课表", Icons.AutoMirrored.Filled.List),
-        Tab(Routes.EXAMS, "考试", Icons.Filled.DateRange),
-        Tab(Routes.SETTINGS, "设置", Icons.Filled.Settings),
-        Tab(Routes.IMPORT, "导入", Icons.Filled.Add),
+        Tab(Routes.SCHEDULE, R.string.nav_schedule, Icons.AutoMirrored.Filled.List),
+        Tab(Routes.EXAMS, R.string.nav_exams, Icons.Filled.DateRange),
+        Tab(Routes.SETTINGS, R.string.nav_settings, Icons.Filled.Settings),
+        Tab(Routes.IMPORT, R.string.nav_import, Icons.Filled.Add),
     )
     Scaffold(
         bottomBar = {
@@ -61,6 +63,7 @@ fun AppNav(db: AppDatabase, initialTab: String? = null) {
                 val backStack by navController.currentBackStackEntryAsState()
                 val currentDestination = backStack?.destination
                 tabs.forEach { tab ->
+                    val label = stringResource(tab.labelRes)
                     NavigationBarItem(
                         selected = currentDestination?.hierarchy?.any { it.route == tab.route } == true,
                         onClick = {
@@ -70,8 +73,8 @@ fun AppNav(db: AppDatabase, initialTab: String? = null) {
                                 restoreState = true
                             }
                         },
-                        icon = { Icon(tab.icon, contentDescription = tab.label) },
-                        label = { Text(tab.label) },
+                        icon = { Icon(tab.icon, contentDescription = label) },
+                        label = { Text(label) },
                     )
                 }
             }
@@ -83,7 +86,7 @@ fun AppNav(db: AppDatabase, initialTab: String? = null) {
                 ScheduleScreen(vm)
             }
             composable(Routes.EXAMS) {
-                val context = LocalContext.current
+                val context = LocalContext.current.applicationContext
                 val vm: ExamViewModel = viewModel(factory = ExamViewModel.Factory(db, context))
                 ExamScreen(vm, onAdd = { /* 考试添加已内联在 ExamScreen */ })
             }
@@ -94,7 +97,7 @@ fun AppNav(db: AppDatabase, initialTab: String? = null) {
                 SettingsScreen(vm)
             }
             composable(Routes.IMPORT) {
-                val context = LocalContext.current
+                val context = LocalContext.current.applicationContext
                 val vm: ImportViewModel = viewModel(factory = ImportViewModel.Factory(db, context))
                 ImportWizardScreen(
                     vm,

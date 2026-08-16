@@ -56,6 +56,31 @@ class GxuParserTest {
     }
 
     @Test
+    fun `multi hyphen period string maps to first and last`() {
+        fun parse(jcs: String): Pair<Int, Int>? {
+            val json = """{"kbList":[{"kcmc":"课","xqj":"3","jcs":"$jcs"}]}"""
+            val c = GxuParser.parseScheduleJson(json).firstOrNull()
+            return c?.let { it.startPeriod to it.endPeriod }
+        }
+        // 1-2-3 → 起始 1、结束 3（首尾数字）
+        assertEquals(1 to 3, parse("1-2-3"))
+        // 01-02-03 同样取首尾
+        assertEquals(1 to 3, parse("01-02-03"))
+    }
+
+    @Test
+    fun `illegal period intervals are rejected`() {
+        fun parseCount(jcs: String): Int {
+            val json = """{"kbList":[{"kcmc":"课","xqj":"3","jcs":"$jcs"}]}"""
+            return GxuParser.parseScheduleJson(json).size
+        }
+        // 5-3：结束小于开始 → 非法
+        assertEquals(0, parseCount("5-3"))
+        // 0-2：起始为 0 → 非法
+        assertEquals(0, parseCount("0-2"))
+    }
+
+    @Test
     fun `parses location combination from xqmc jxdd jsmc`() {
         // 只有 jxdd（无校区）
         val onlyRoom = GxuParser.parseScheduleJson(

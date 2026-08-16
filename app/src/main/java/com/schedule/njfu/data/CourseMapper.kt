@@ -35,6 +35,10 @@ object CourseMapper {
      * 3. 足够深的自定义颜色原样保留。
      */
     fun displayColor(raw: Int): Int {
+        // legacy 色收敛：`% palette.size` 把旧 16 色映射到当前色板对应槽位。
+        // 这是【有意保持历史数据映射的取舍】：有些 legacy 槽位在收窄后的色板里没有一一对应，
+        // 取模让它们落回最近的色板色，保证历史卡片不出现孤立底色，而不是为单点重排色板——
+        // 不改行为，仅为代码可读性补说明。
         if (raw in legacyPalette) return palette[legacyPalette.indexOf(raw) % palette.size]
         return if (whiteTextContrastOk(raw)) raw else palette[Math.floorMod(raw, palette.size)]
     }

@@ -1,3 +1,266 @@
 <resources>
     <string name="app_name">南林课程表</string>
+
+    <!-- 星期（与 WidgetData.dayNameRes 的 1..7 对应） -->
+    <string name="weekday_mon">一</string>
+    <string name="weekday_tue">二</string>
+    <string name="weekday_wed">三</string>
+    <string name="weekday_thu">四</string>
+    <string name="weekday_fri">五</string>
+    <string name="weekday_sat">六</string>
+    <string name="weekday_sun">日</string>
+
+    <!-- 通用动作 -->
+    <string name="action_save">保存</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_delete">删除</string>
+    <string name="action_confirm">确定</string>
+    <string name="weekday_with_prefix">周%1$s</string>
+    <string name="input_date_label">日期（yyyy-MM-dd）</string>
+
+    <!-- 底部导航 -->
+    <string name="nav_schedule">课表</string>
+    <string name="nav_exams">考试</string>
+    <string name="nav_settings">设置</string>
+    <string name="nav_import">导入</string>
+
+    <!-- 课程对话框 -->
+    <string name="course_add_title">添加课程</string>
+    <string name="course_detail_title">课程详情</string>
+    <string name="course_name_label">课程名称</string>
+    <string name="course_teacher_label">教师</string>
+    <string name="course_location_label">地点</string>
+    <string name="course_day_label">星期</string>
+    <string name="course_day_select">选择星期</string>
+    <string name="course_start_period_label">开始节</string>
+    <string name="course_end_period_label">结束节</string>
+    <string name="course_weeks_label">周次</string>
+    <string name="course_weeks_hint">如 1-16、单周、1,3,5、1-16(单)</string>
+    <string name="course_error_name_empty">请输入课程名称</string>
+    <string name="course_error_day">星期需为 1-7</string>
+    <string name="course_error_start_period">开始节需为 1-%1$d</string>
+    <string name="course_error_end_period">结束节需在 %1$d..%2$d 之间</string>
+    <string name="course_error_weeks">周次格式无效，如 1-16 / 单周 / 1-16(单)</string>
+
+    <!-- 课表页 -->
+    <string name="schedule_empty_hint">暂无课程，点右下角 ＋ 加课</string>
+    <string name="schedule_add_course">加课</string>
+    <string name="schedule_conflict_title">课程时间冲突</string>
+    <string name="schedule_conflict_message">「%1$s」与以下课程时间重叠（同一天同一时段有课）：</string>
+    <string name="schedule_conflict_item">• %1$s（周%2$s %3$d-%4$d节）</string>
+    <string name="schedule_conflict_note">确认添加后两门课会在同一格并排显示。</string>
+    <string name="schedule_conflict_confirm">仍然添加</string>
+    <string name="schedule_conflict_cancel">返回修改</string>
+    <string name="schedule_week_title">第 %1$d 周</string>
+    <string name="schedule_this_week">本周</string>
+    <string name="schedule_back_to_current_week">回到当前周</string>
+    <string name="schedule_prev_week">上一周</string>
+    <string name="schedule_next_week">下一周</string>
+    <string name="schedule_day_header">周%1$s</string>
+    <string name="schedule_period_line">%1$d-%2$d节</string>
+    <string name="schedule_week_range_same_year">%1$d月%2$d日 – %3$d月%4$d日</string>
+    <string name="schedule_week_range_cross_year">%1$d年%2$d月%3$d日 – %4$d年%5$d月%6$d日</string>
+    <string name="holiday_shift_line">%1$d月%2$d日（%3$s）按周%3$s显示</string>
+
+    <!-- 考试页 -->
+    <string name="exam_title">考试安排</string>
+    <string name="exam_empty">暂无考试安排</string>
+    <string name="exam_count">共 %1$d 门</string>
+    <string name="exam_count_today">共 %1$d 门 · 最近一场就在今天</string>
+    <string name="exam_count_days">共 %1$d 门 · 最近一场 %2$d 天后</string>
+    <string name="exam_add">＋ 添加考试</string>
+    <string name="exam_add_title">添加考试</string>
+    <string name="exam_delete_title">删除考试</string>
+    <string name="exam_delete_message">确定删除「%1$s」的考试安排？</string>
+    <string name="exam_name_label">考试名称</string>
+
+    <!-- 导入向导 -->
+    <string name="import_title">导入课程表</string>
+    <string name="import_subtitle">在应用内置浏览器登录教务系统即可自动导入；登录异常时可用教务导出的课表文件兜底。</string>
+    <string name="import_auto">自动导入</string>
+    <string name="import_auto_desc">打开教务系统登录页，输入学号密码（如需验证码直接在页面内输入），登录成功后自动抓取本学期课表。</string>
+    <string name="import_will_import">将导入 %1$s</string>
+    <string name="import_select_semester">请选择学期</string>
+    <string name="import_modify">修改</string>
+    <string name="import_login_and_import">登录教务系统并导入</string>
+    <string name="import_importing">导入中…</string>
+    <string name="import_confirm">确认导入</string>
+    <string name="import_confirm_hint">确认后将替换现有课表数据（建议先到设置页导出备份）</string>
+    <string name="import_success">成功导入 %1$d 门课程</string>
+    <string name="import_success_fixed_weeks_suffix">（%1$d 门周次信息缺失，已按全学期显示，可在课表里点开修正）</string>
+    <string name="import_goto_schedule">去课表看看</string>
+    <string name="import_error_suggestion">可检查网络后重试，或使用下方手动导入</string>
+    <string name="import_manual">手动导入</string>
+    <string name="import_manual_desc">教务系统网页端「学生个人课表」导出的课表文件；另支持 JSON（备份导出文件）、ICS（日历导出）和 Excel（xlsx）。</string>
+    <string name="import_from_xls">从教务导出的课表（.xls）导入</string>
+    <string name="import_from_json">从 JSON 导入</string>
+    <string name="import_from_ics">从 ICS 导入</string>
+    <string name="import_from_excel_xlsx">从 Excel（xlsx）导入</string>
+    <string name="import_paste_json_hint">粘贴 JSON 备份内容（课程数组或完整备份对象）</string>
+    <string name="import_paste_ics_hint">粘贴 ICS 日历内容（含 BEGIN:VEVENT 的文本）</string>
+    <string name="import_paste_content_label">内容</string>
+    <string name="import_paste_confirm">导入</string>
+    <string name="import_diff_summary">解析到 %1$d 门课程，与现有课表对比：</string>
+    <string name="import_diff_added">• 新增 %1$d 门</string>
+    <string name="import_diff_removed">• 删除 %1$d 门</string>
+    <string name="import_diff_changed">• 变更 %1$d 门</string>
+    <string name="import_diff_unchanged">• 不变 %1$d 门</string>
+    <string name="import_diff_conflict">⚠ 新数据中有 %1$d 处时间冲突（同一时间多门课），导入后同格课程将并排显示</string>
+    <string name="import_fixed_weeks">%1$d 门课程周次信息缺失，将按全学期显示（可在课表里点开修正）</string>
+    <string name="import_exam_failed">考试安排获取失败，本次仅导入课表</string>
+    <string name="import_error_no_session">未获取到登录会话，请重试或改用下方手动导入</string>
+    <string name="import_loading_fetching">正在获取课表…</string>
+    <string name="import_error_fetch_failed">获取课表失败：%1$s，可改用下方手动导入</string>
+    <string name="import_error_json">JSON 解析失败：%1$s</string>
+    <string name="import_error_ics">ICS 解析失败：%1$s</string>
+    <string name="import_error_excel">Excel 解析失败：%1$s</string>
+    <string name="import_error_schedule">课表解析失败：%1$s</string>
+    <string name="import_error_no_courses_xls">未解析到课程，请确认是教务系统导出的「学生个人课表.xls」</string>
+    <string name="import_error_no_courses_any">未解析到任何课程，请检查文件内容或教务系统是否改版</string>
+    <string name="import_error_no_courses">未解析到任何课程</string>
+    <string name="import_error_nothing_to_import">没有可导入的课程，请重新导入</string>
+    <string name="import_semester_title">选择学期</string>
+    <string name="import_semester_year">学年</string>
+    <string name="import_semester_term">学期</string>
+    <string name="import_term_placeholder">请选择</string>
+    <string name="import_term_1">第 1 学期（秋）</string>
+    <string name="import_term_2">第 2 学期（春）</string>
+    <string name="import_term_3">第 3 学期（夏）</string>
+
+    <!-- 教务登录页 -->
+    <string name="cas_login_title">教务系统登录</string>
+    <string name="cas_login_timeout">登录超时，请检查网络后重试</string>
+    <string name="cas_login_load_failed">页面加载失败（%1$d）：%2$s</string>
+
+    <!-- 设置页 -->
+    <string name="settings_account">账号</string>
+    <string name="settings_student_id">学号</string>
+    <string name="settings_not_logged_in">未登录</string>
+    <string name="settings_logout">退出登录</string>
+    <string name="settings_logout_confirm_message">确定退出当前账号？已保存的课表数据不会被删除。</string>
+    <string name="settings_logout_confirm_button">退出</string>
+    <string name="settings_logged_out">已退出登录</string>
+    <string name="settings_semester">学期</string>
+    <string name="settings_semester_start">学期起始日期</string>
+    <string name="settings_semester_start_desc">学期第一周的周一，用于计算当前教学周</string>
+    <string name="settings_shift_settings">调休设置</string>
+    <string name="settings_shift_settings_subtitle">节假日调休日映射</string>
+    <string name="settings_shift_desc">节假日调休后，有些周末需要按工作日上课（如国庆后周六补周一的课）。添加「日期 → 按周几显示」的映射，课表与课前提醒都会按映射生效。</string>
+    <string name="settings_shift_empty">暂无调休映射</string>
+    <string name="settings_shift_by_week">按周</string>
+    <string name="settings_shift_add_mapping">添加映射</string>
+    <string name="settings_period_times">节次时间段</string>
+    <string name="settings_period_times_hint">点击设置</string>
+    <string name="settings_period_format_hint">第 %1$d 节</string>
+    <string name="settings_period_error">时间格式须为 HH:mm（如 08:00、21:30），请修正后保存</string>
+    <string name="settings_remind">提醒</string>
+    <string name="settings_remind_notification_permission">通知权限未开启，课前 / 考试提醒无法显示</string>
+    <string name="settings_permission_enable">开启</string>
+    <string name="settings_exact_alarm_permission">精确闹钟权限未开启，提醒可能不准时</string>
+    <string name="settings_permission_go_settings">去设置</string>
+    <string name="settings_remind_before">提前提醒</string>
+    <string name="settings_minutes">%1$d 分钟</string>
+    <string name="settings_remind_desc">课程开始前提醒上课。Android 12+ 需在系统设置中允许「闹钟与提醒」权限，Android 13+ 需授予通知权限，否则提醒可能不生效。</string>
+    <string name="settings_exam_remind">考试提醒</string>
+    <string name="settings_exam_remind_desc">考试前提醒，默认提前 1 天与考试当天各提醒一次</string>
+    <string name="settings_exam_advance">提前</string>
+    <string name="settings_days_one">1 天</string>
+    <string name="settings_days">%1$d 天</string>
+    <string name="settings_widgets">桌面小组件</string>
+    <string name="settings_miui">小米设备优化</string>
+    <string name="settings_miui_desc">MIUI 的后台限制可能延迟课前提醒与桌面小组件刷新，建议开启「自启动」并将省电策略设为「无限制」。</string>
+    <string name="settings_miui_autostart">开启自启动权限</string>
+    <string name="settings_miui_battery">允许后台运行（省电策略）</string>
+    <string name="settings_widget_refresh_now">立即刷新小组件</string>
+    <string name="settings_widget_refreshed">小组件已刷新</string>
+    <string name="settings_data">数据</string>
+    <string name="settings_import_excel">从 Excel 导入</string>
+    <string name="settings_export_backup">导出备份</string>
+    <string name="settings_export_debug_log">导出调试日志（排查问题用）</string>
+    <string name="settings_clear_data">清空课表数据</string>
+    <string name="settings_clear_confirm_message">将删除全部课程数据，此操作不可恢复。确定继续？</string>
+    <string name="settings_clear_confirm_button">清空</string>
+    <string name="settings_data_cleared">课表数据已清空</string>
+    <string name="settings_imported_count">已导入 %1$d 门课程</string>
+    <string name="settings_import_json_failed">JSON 导入失败：%1$s</string>
+    <string name="settings_import_ics_failed">ICS 导入失败：%1$s</string>
+    <string name="settings_import_excel_failed">Excel 导入失败：%1$s</string>
+    <string name="settings_exported_count">已导出 %1$d 门课程</string>
+    <string name="settings_export_failed">导出失败：%1$s</string>
+    <string name="settings_debug_log_exported">调试日志已导出</string>
+    <string name="settings_debug_log_failed">日志导出失败：%1$s</string>
+
+    <!-- 通用错误提示（经 Toast/异常信息展示给用户） -->
+    <string name="error_cannot_read_file">无法读取文件</string>
+    <string name="error_cannot_open_file">无法打开文件</string>
+    <string name="error_cannot_create_file">无法创建文件</string>
+    <string name="error_no_debug_log">暂无调试日志</string>
+
+    <!-- 桌面小组件（RemoteViews） -->
+    <string name="widget_courses_header">周%1$s · 第%2$d周 · %3$d节课</string>
+    <string name="widget_course_line">%1$d-%2$d节 %3$s %4$s</string>
+    <string name="widget_week_course_line">%1$d-%2$d节 %3$s</string>
+    <string name="widget_next_subtitle">下一节课 · 第%1$d周 周%2$s</string>
+    <string name="widget_next_before">距上课 %1$d 分钟</string>
+    <string name="widget_next_in_progress">上课中 · 距下课 %1$d 分钟</string>
+    <string name="widget_next_after">今天课已上完</string>
+    <string name="widget_next_no_class">今日无课</string>
+    <string name="widget_today_empty">今天无课</string>
+    <string name="widget_countdown_today">今天</string>
+    <string name="widget_countdown_in_days">还有 %1$d 天</string>
+    <string name="widget_exam_countdown_line">考试倒计时：%1$s · %2$s</string>
+    <string name="widget_exam_label">下一场考试</string>
+    <string name="widget_exam_date_format">MM月dd日</string>
+
+    <!-- 小组件主题 -->
+    <string name="widget_theme_morandi">莫兰迪纸感</string>
+    <string name="widget_theme_fresh">清新浅色</string>
+    <string name="widget_theme_deep">深邃夜间</string>
+    <string name="widget_theme_title">小组件主题</string>
+    <string name="widget_theme_desc">作用于「今日课程」「下一节课」「本周课表」等桌面小组件的底色与文字，改后即时生效。</string>
+
+    <!-- 桌面小组件添加引导 -->
+    <string name="widget_guide_title">桌面小组件</string>
+    <string name="widget_guide_subtitle">如何把小组件添加到手机桌面</string>
+    <string name="widget_guide_general_title">通用步骤</string>
+    <string name="widget_guide_by_brand">按手机品牌查看</string>
+    <string name="widget_guide_faq_title">常见问题</string>
+    <string name="widget_guide_collapse">收起</string>
+    <string name="widget_guide_expand">展开</string>
+    <string name="widget_guide_step_1">在桌面空白处长按，进入桌面编辑模式</string>
+    <string name="widget_guide_step_2">选择「小组件 / 窗口小工具 / 添加小部件」</string>
+    <string name="widget_guide_step_3">在列表里找到「今日课程」「下一节课」「考试倒计时」等，拖到桌面</string>
+    <string name="widget_guide_vendor_xiaomi">小米 / 澎湃 OS</string>
+    <string name="widget_guide_vendor_xiaomi_step_1">桌面双指捏合 → 添加小部件；或桌面空白处长按 → 添加小部件</string>
+    <string name="widget_guide_vendor_xiaomi_step_2">搜索「课程表」即可找到我们的桌面小组件</string>
+    <string name="widget_guide_vendor_huawei">华为 / 鸿蒙</string>
+    <string name="widget_guide_vendor_huawei_step_1">桌面双指捏合 → 服务卡片 / 小工具；或长按桌面 → 更多服务卡片</string>
+    <string name="widget_guide_vendor_huawei_step_2">在卡片列表里搜索「课程表」</string>
+    <string name="widget_guide_vendor_oppo">OPPO / ColorOS</string>
+    <string name="widget_guide_vendor_oppo_step_1">长按桌面 → 添加卡片和小部件；或双指捏合 → 小部件</string>
+    <string name="widget_guide_vendor_oppo_step_2">搜索「课程表」即可找到我们的桌面小组件</string>
+    <string name="widget_guide_vendor_vivo">vivo / OriginOS</string>
+    <string name="widget_guide_vendor_vivo_step_1">长按桌面空白处 → 添加小部件 → 找到「课程表」</string>
+    <string name="widget_guide_vendor_vivo_step_2">OriginOS 可在变形器里调整小组件尺寸</string>
+    <string name="widget_guide_vendor_honor">荣耀 / MagicOS</string>
+    <string name="widget_guide_vendor_honor_step_1">长按桌面 → 添加小工具；或双指捏合 → 小工具</string>
+    <string name="widget_guide_vendor_honor_step_2">搜索「课程表」即可找到我们的桌面小组件</string>
+    <string name="widget_guide_vendor_samsung">三星 / One UI</string>
+    <string name="widget_guide_vendor_samsung_step_1">长按桌面 → 小组件 → 找到「课程表」</string>
+    <string name="widget_guide_vendor_samsung_step_2">找到后长按拖动到桌面即可</string>
+    <string name="widget_guide_vendor_aosp">原生 Android</string>
+    <string name="widget_guide_vendor_aosp_step_1">长按桌面空白处 → 小组件</string>
+    <string name="widget_guide_vendor_aosp_step_2">在列表里找到「课程表」并拖到桌面</string>
+    <string name="widget_guide_faq_1_q">添加后不更新怎么办</string>
+    <string name="widget_guide_faq_1_a">打开一次 App 会自动刷新；也可以点一下小组件；或到设置页「小米设备优化」区块手动刷新。</string>
+    <string name="widget_guide_faq_2_q">找不到我们的小组件</string>
+    <string name="widget_guide_faq_2_a">在小组件列表顶部的搜索框搜「课程表」；有些系统会把小组件放在「全部」分类里。</string>
+
+    <!-- 课前 / 考试提醒通知 -->
+    <string name="notification_class_soon">即将上课</string>
+    <string name="notification_channel_schedule">课程提醒</string>
+    <string name="notification_channel_exams">考试提醒</string>
+    <string name="notification_exam_tomorrow">明天有考试</string>
+    <string name="notification_exam_in_days">%1$d 天后有考试</string>
+    <string name="notification_exam_today">今天有考试</string>
 </resources>

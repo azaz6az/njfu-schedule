@@ -1,5 +1,9 @@
 package com.schedule.njfu.ui.settings
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,6 +40,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,8 +49,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.schedule.njfu.R
+import com.schedule.njfu.ui.weekdayName
 import com.schedule.njfu.util.MiuiUtils
 import com.schedule.njfu.widget.WidgetRefreshWorker
 import kotlinx.coroutines.launch
@@ -58,9 +70,12 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     val examRemindEnabled by viewModel.examRemindEnabled.collectAsStateWithLifecycle()
     val examRemindDays by viewModel.examRemindDays.collectAsStateWithLifecycle()
     val username by viewModel.username.collectAsStateWithLifecycle()
+    val widgetTheme by viewModel.widgetTheme.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var notificationsEnabled by remember { mutableStateOf(false) }
+    var canScheduleExact by remember { mutableStateOf(true) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var showDateDialog by remember { mutableStateOf(false) }
     var showPeriodDialog by remember { mutableStateOf(false) }
@@ -76,11 +91,11 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
             try {
                 val text = context.contentResolver.openInputStream(uri)
                     ?.bufferedReader()?.use { it.readText() }
-                    ?: error("无法读取文件")
+                    ?: error(context.getString(R.string.error_cannot_read_file))
                 val count = viewModel.importFromJson(text)
-                Toast.makeText(context, "已导入 $count 门课程", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.settings_imported_count, count), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Toast.makeText(context, "JSON 导入失败：${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, context.getString(R.string.settings_import_json_failed, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -91,11 +106,11 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
             try {
                 val text = context.contentResolver.openInputStream(uri)
                     ?.bufferedReader()?.use { it.readText() }
-                    ?: error("无法读取文件")
+                    ?: error(context.getString(R.string.error_cannot_read_file))
                 val count = viewModel.importFromIcs(text)
-                Toast.makeText(context, "已导入 $count 门课程", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.settings_imported_count, count), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Toast.makeText(context, "ICS 导入失败：${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, context.getString(R.string.settings_import_ics_failed, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -105,9 +120,9 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
         if (uri != null) scope.launch {
             try {
                 val count = viewModel.importFromExcel(uri)
-                Toast.makeText(context, "已导入 $count 门课程", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.settings_imported_count, count), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Toast.makeText(context, "Excel 导入失败：${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, context.getString(R.string.settings_import_excel_failed, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -117,9 +132,9 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
         if (uri != null) scope.launch {
             try {
                 val count = viewModel.exportBackup(uri)
-                Toast.makeText(context, "已导出 $count 门课程", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.settings_exported_count, count), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Toast.makeText(context, "导出失败：${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, context.getString(R.string.settings_export_failed, e.message), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -129,19 +144,44 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
         if (uri != null) scope.launch {
             try {
                 viewModel.exportDebugLog(uri)
-                Toast.makeText(context, "调试日志已导出", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.settings_debug_log_exported), Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Toast.makeText(context, "日志导出失败：${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, context.getString(R.string.settings_debug_log_failed, e.message), Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    // 进入页面时（及每次回到前台时，例如从系统设置返回）重新检查通知与精确闹钟授权状态
+    fun refreshPermissionFlags() {
+        notificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        canScheduleExact =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                context.getSystemService(android.app.AlarmManager::class.java)
+                    .canScheduleExactAlarms()
+            } else true
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val owner = lifecycleOwner
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refreshPermissionFlags()
+        }
+        owner.lifecycle.addObserver(observer)
+        refreshPermissionFlags()
+        onDispose { owner.lifecycle.removeObserver(observer) }
     }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
-        item { SectionHeader("账号") }
-        item { SettingRow("学号", username.ifBlank { "未登录" }) }
+        item { SectionHeader(stringResource(R.string.settings_account)) }
+        item {
+            SettingRow(
+                stringResource(R.string.settings_student_id),
+                username.ifBlank { context.getString(R.string.settings_not_logged_in) },
+            )
+        }
         item {
             Row(
                 Modifier
@@ -153,14 +193,22 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                     onClick = { showLogoutConfirm = true },
                     enabled = username.isNotBlank(),
                     shape = RoundedCornerShape(50),
-                ) { Text("退出登录") }
+                ) { Text(stringResource(R.string.settings_logout)) }
             }
         }
 
-        item { SectionHeader("学期") }
-        item { SettingRow("学期起始日期", semesterStart.toString()) { showDateDialog = true } }
+        item { SectionHeader(stringResource(R.string.settings_semester)) }
         item {
-            SettingRow("调休设置", "节假日调休日映射") {
+            SettingRow(
+                stringResource(R.string.settings_semester_start),
+                semesterStart.toString(),
+            ) { showDateDialog = true }
+        }
+        item {
+            SettingRow(
+                stringResource(R.string.settings_shift_settings),
+                stringResource(R.string.settings_shift_settings_subtitle),
+            ) {
                 scope.launch {
                     holidayShifts = viewModel.loadShifts()
                     showHolidayDialog = true
@@ -168,9 +216,12 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
             }
         }
 
-        item { SectionHeader("节次时间段") }
+        item { SectionHeader(stringResource(R.string.settings_period_times)) }
         item {
-            SettingRow("节次时间段", "点击设置") {
+            SettingRow(
+                stringResource(R.string.settings_period_times),
+                stringResource(R.string.settings_period_times_hint),
+            ) {
                 scope.launch {
                     periodTimes = viewModel.loadPeriodTimes()
                     showPeriodDialog = true
@@ -178,10 +229,36 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
             }
         }
 
-        item { SectionHeader("提醒") }
+        item { SectionHeader(stringResource(R.string.settings_remind)) }
         item {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                Text("提前提醒", style = MaterialTheme.typography.bodyLarge)
+                // 通知权限未开启时引导
+                if (!notificationsEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    PermissionBanner(
+                        message = stringResource(R.string.settings_remind_notification_permission),
+                        buttonText = stringResource(R.string.settings_permission_enable),
+                        onClick = {
+                            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            runCatching { context.startActivity(intent) }
+                        },
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+                // 精确闹钟（Android 12+）未授权时引导
+                if (!canScheduleExact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    PermissionBanner(
+                        message = stringResource(R.string.settings_exact_alarm_permission),
+                        buttonText = stringResource(R.string.settings_permission_go_settings),
+                        onClick = {
+                            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                                .setData(Uri.parse("package:${context.packageName}"))
+                            runCatching { context.startActivity(intent) }
+                        },
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+                Text(stringResource(R.string.settings_remind_before), style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(8.dp))
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     listOf(5, 10, 15).forEachIndexed { index, minutes ->
@@ -189,13 +266,12 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                             selected = remindMinutes == minutes,
                             onClick = { viewModel.saveRemindMinutes(minutes) },
                             shape = SegmentedButtonDefaults.itemShape(index = index, count = 3),
-                        ) { Text("$minutes 分钟") }
+                        ) { Text(stringResource(R.string.settings_minutes, minutes)) }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "课程开始前提醒上课。Android 12+ 需在系统设置中允许「闹钟与提醒」权限，" +
-                        "Android 13+ 需授予通知权限，否则提醒可能不生效。",
+                    stringResource(R.string.settings_remind_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -208,9 +284,9 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("考试提醒", style = MaterialTheme.typography.bodyLarge)
+                        Text(stringResource(R.string.settings_exam_remind), style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            "考试前提醒，默认提前 1 天与考试当天各提醒一次",
+                            stringResource(R.string.settings_exam_remind_desc),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -224,7 +300,7 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "提前",
+                            stringResource(R.string.settings_exam_advance),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -235,7 +311,12 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                                     selected = examRemindDays == days,
                                     onClick = { viewModel.saveExamRemindDays(days) },
                                     shape = SegmentedButtonDefaults.itemShape(index = index, count = 4),
-                                ) { Text(if (days == 1) "1 天" else "$days 天") }
+                                ) {
+                                    Text(
+                                        if (days == 1) stringResource(R.string.settings_days_one)
+                                        else stringResource(R.string.settings_days, days),
+                                    )
+                                }
                             }
                         }
                     }
@@ -243,14 +324,14 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
             }
         }
 
-        item { SectionHeader("桌面小组件") }
-        item { WidgetThemeSection() }
+        item { SectionHeader(stringResource(R.string.settings_widgets)) }
+        item { WidgetThemeSection(selected = widgetTheme, onSelect = viewModel::saveWidgetTheme) }
         item { Spacer(Modifier.height(8.dp)) }
         item { WidgetGuideSection() }
         item { Spacer(Modifier.height(8.dp)) }
 
         if (MiuiUtils.isMiui()) {
-            item { SectionHeader("小米设备优化") }
+            item { SectionHeader(stringResource(R.string.settings_miui)) }
             item {
                 Column(
                     Modifier
@@ -259,8 +340,7 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        "MIUI 的后台限制可能延迟课前提醒与桌面小组件刷新，" +
-                            "建议开启「自启动」并将省电策略设为「无限制」。",
+                        stringResource(R.string.settings_miui_desc),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -274,7 +354,7 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(50),
-                    ) { Text("开启自启动权限") }
+                    ) { Text(stringResource(R.string.settings_miui_autostart)) }
                     OutlinedButton(
                         onClick = {
                             runCatching {
@@ -285,22 +365,26 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(50),
-                    ) { Text("允许后台运行（省电策略）") }
+                    ) { Text(stringResource(R.string.settings_miui_battery)) }
                     OutlinedButton(
                         onClick = {
                             scope.launch {
                                 WidgetRefreshWorker.refreshNow(context.applicationContext)
-                                Toast.makeText(context, "小组件已刷新", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.settings_widget_refreshed),
+                                    Toast.LENGTH_SHORT,
+                                ).show()
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(50),
-                    ) { Text("立即刷新小组件") }
+                    ) { Text(stringResource(R.string.settings_widget_refresh_now)) }
                 }
             }
         }
 
-        item { SectionHeader("数据") }
+        item { SectionHeader(stringResource(R.string.settings_data)) }
         item {
             Column(
                 Modifier
@@ -312,12 +396,12 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                     onClick = { jsonLauncher.launch(arrayOf("application/json")) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(50),
-                ) { Text("从 JSON 导入") }
+                ) { Text(stringResource(R.string.import_from_json)) }
                 OutlinedButton(
                     onClick = { icsLauncher.launch(arrayOf("text/calendar")) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(50),
-                ) { Text("从 ICS 导入") }
+                ) { Text(stringResource(R.string.import_from_ics)) }
                 OutlinedButton(
                     onClick = {
                         excelLauncher.launch(
@@ -326,17 +410,17 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(50),
-                ) { Text("从 Excel 导入") }
+                ) { Text(stringResource(R.string.settings_import_excel)) }
                 OutlinedButton(
                     onClick = { exportLauncher.launch("schedule_backup.json") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(50),
-                ) { Text("导出备份") }
+                ) { Text(stringResource(R.string.settings_export_backup)) }
                 OutlinedButton(
                     onClick = { debugLogLauncher.launch("debug_log.txt") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(50),
-                ) { Text("导出调试日志（排查问题用）") }
+                ) { Text(stringResource(R.string.settings_export_debug_log)) }
                 Button(
                     onClick = { showClearConfirm = true },
                     modifier = Modifier.fillMaxWidth(),
@@ -345,7 +429,7 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                         containerColor = MaterialTheme.colorScheme.errorContainer,
                         contentColor = MaterialTheme.colorScheme.onErrorContainer,
                     ),
-                ) { Text("清空课表数据") }
+                ) { Text(stringResource(R.string.settings_clear_data)) }
             }
         }
     }
@@ -353,16 +437,20 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     if (showLogoutConfirm) {
         AlertDialog(
             onDismissRequest = { showLogoutConfirm = false },
-            title = { Text("退出登录") },
-            text = { Text("确定退出当前账号？已保存的课表数据不会被删除。") },
+            title = { Text(stringResource(R.string.settings_logout)) },
+            text = { Text(stringResource(R.string.settings_logout_confirm_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.logout()
                     showLogoutConfirm = false
-                    Toast.makeText(context, "已退出登录", Toast.LENGTH_SHORT).show()
-                }) { Text("退出") }
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.settings_logged_out),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }) { Text(stringResource(R.string.settings_logout_confirm_button)) }
             },
-            dismissButton = { TextButton(onClick = { showLogoutConfirm = false }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { showLogoutConfirm = false }) { Text(stringResource(R.string.action_cancel)) } },
         )
     }
     if (showDateDialog) {
@@ -399,16 +487,20 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     if (showClearConfirm) {
         AlertDialog(
             onDismissRequest = { showClearConfirm = false },
-            title = { Text("清空课表数据") },
-            text = { Text("将删除全部课程数据，此操作不可恢复。确定继续？") },
+            title = { Text(stringResource(R.string.settings_clear_data)) },
+            text = { Text(stringResource(R.string.settings_clear_confirm_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.clearCourses()
                     showClearConfirm = false
-                    Toast.makeText(context, "课表数据已清空", Toast.LENGTH_SHORT).show()
-                }) { Text("清空") }
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.settings_data_cleared),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }) { Text(stringResource(R.string.settings_clear_confirm_button)) }
             },
-            dismissButton = { TextButton(onClick = { showClearConfirm = false }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { showClearConfirm = false }) { Text(stringResource(R.string.action_cancel)) } },
         )
     }
 }
@@ -446,6 +538,32 @@ private fun SettingRow(title: String, value: String, onClick: (() -> Unit)? = nu
     )
 }
 
+/** 权限引导横幅：提醒区块内，未授权时展示提示文案 + 跳转系统设置的按钮 */
+@Composable
+private fun PermissionBanner(
+    message: String,
+    buttonText: String,
+    onClick: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            message,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+        OutlinedButton(
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(50),
+        ) { Text(buttonText) }
+    }
+}
+
 @Composable
 private fun SemesterStartDialog(
     initial: LocalDate,
@@ -457,32 +575,32 @@ private fun SemesterStartDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("学期起始日期") },
+        title = { Text(stringResource(R.string.settings_semester_start)) },
         text = {
             Column {
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
-                    label = { Text("日期（yyyy-MM-dd）") },
+                    label = { Text(stringResource(R.string.input_date_label)) },
                     singleLine = true,
                     isError = text.isNotBlank() && date == null,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "学期第一周的周一，用于计算当前教学周",
+                    stringResource(R.string.settings_semester_start_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = { date?.let(onSave) }, enabled = date != null) { Text("保存") }
+            TextButton(onClick = { date?.let(onSave) }, enabled = date != null) {
+                Text(stringResource(R.string.action_save))
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
 }
-
-private val ShiftDayLabels = listOf("一", "二", "三", "四", "五", "六", "日")
 
 /** 调休设置：把「某天」映射为「按周几显示」，课表与提醒同时生效 */
 @Composable
@@ -498,21 +616,20 @@ private fun HolidayShiftsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("调休设置") },
+        title = { Text(stringResource(R.string.settings_shift_settings)) },
         text = {
             Column(
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    "节假日调休后，有些周末需要按工作日上课（如国庆后周六补周一的课）。" +
-                        "添加「日期 → 按周几显示」的映射，课表与课前提醒都会按映射生效。",
+                    stringResource(R.string.settings_shift_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (shifts.isEmpty()) {
                     Text(
-                        "暂无调休映射",
+                        stringResource(R.string.settings_shift_empty),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -523,12 +640,20 @@ private fun HolidayShiftsDialog(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                "${d.monthValue}月${d.dayOfMonth}日（${ShiftDayLabels[day - 1]}）按周${ShiftDayLabels[day - 1]}显示",
+                                stringResource(
+                                    R.string.holiday_shift_line,
+                                    d.monthValue,
+                                    d.dayOfMonth,
+                                    weekdayName(day),
+                                ),
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.weight(1f),
                             )
                             IconButton(onClick = { shifts = shifts - d }) {
-                                Icon(Icons.Filled.Delete, contentDescription = "删除")
+                                Icon(
+                                    Icons.Filled.Delete,
+                                    contentDescription = stringResource(R.string.action_delete),
+                                )
                             }
                         }
                     }
@@ -537,13 +662,13 @@ private fun HolidayShiftsDialog(
                 OutlinedTextField(
                     value = dateText,
                     onValueChange = { dateText = it },
-                    label = { Text("日期（yyyy-MM-dd）") },
+                    label = { Text(stringResource(R.string.input_date_label)) },
                     singleLine = true,
                     isError = dateText.isNotBlank() && date == null,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("按周", style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.settings_shift_by_week), style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.width(8.dp))
                     SingleChoiceSegmentedButtonRow(Modifier.weight(1f)) {
                         (1..7).forEachIndexed { index, day ->
@@ -551,7 +676,7 @@ private fun HolidayShiftsDialog(
                                 selected = targetDay == day,
                                 onClick = { targetDay = day },
                                 shape = SegmentedButtonDefaults.itemShape(index = index, count = 7),
-                            ) { Text(ShiftDayLabels[day - 1]) }
+                            ) { Text(weekdayName(day)) }
                         }
                     }
                 }
@@ -563,12 +688,12 @@ private fun HolidayShiftsDialog(
                         }
                     },
                     enabled = date != null,
-                ) { Text("添加映射") }
+                ) { Text(stringResource(R.string.settings_shift_add_mapping)) }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(shifts) }) { Text("保存") }
+            TextButton(onClick = { onSave(shifts) }) { Text(stringResource(R.string.action_save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
 }

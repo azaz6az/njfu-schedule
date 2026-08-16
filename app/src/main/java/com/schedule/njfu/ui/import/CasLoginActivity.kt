@@ -2,12 +2,16 @@ package com.schedule.njfu.ui.import
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import com.schedule.njfu.R
 import com.schedule.njfu.importer.School
 import com.schedule.njfu.importer.njfu.CasLoginClient
 
@@ -30,13 +34,57 @@ class CasLoginActivity : ComponentActivity() {
         const val EXTRA_SUCCESS_COOKIE_MARKER = "extra_success_cookie_marker"
         const val EXTRA_SUCCESS_URL_BLACKLIST = "extra_success_url_blacklist"
         const val EXTRA_USER_AGENT = "extra_user_agent"
+        /** 登录加载超时（毫秒）：超过仍未成功判定则自动结束并提示 */
+        const val LOGIN_TIMEOUT_MS = 120_000L
     }
 
     private var done = false
+    private var webView: WebView? = null
+    private var timeoutGuard: TimeoutGuard? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /** 登录超时守卫：启动加载后 120 秒未成功则自动结束并提示，防止永久挂起 */
+    private inner class TimeoutGuard : Runnable {
+        override fun run() {
+            if (!done) {
+                done = true
+                Toast.makeText(
+                    this@CasLoginActivity,
+                    getString(R.string.cas_login_timeout),
+                    Toast.LENGTH_SHORT,
+                ).show()
+                setResult(RESULT_CANCELED)
+                finish()
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        webView?.onResume()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        webView?.onPause()
+    }
+
+    override fun onDestroy() {
+        // WebView 泄漏防护：停止加载、从窗口树移除并销毁；带判空与重复销毁保护
+        timeoutGuard?.let { mainHandler.removeCallbacks(it); timeoutGuard = null }
+        webView?.let { v ->
+            webView = null
+            v.stopLoading()
+            (v.parent as? ViewGroup)?.removeView(v)
+            v.removeAllViews()
+            v.destroy()
+        }
+        super.onDestroy()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        title = "教务系统登录"
+        title = getString(R.string.cas_login_title)
 
         val startUrl = intent.getStringExtra(EXTRA_START_URL) ?: School.NJFU.loginUrl
         val hostPrefixes = intent.getStringArrayListExtra(EXTRA_SUCCESS_HOST_PREFIXES)
@@ -51,6 +99,7 @@ class CasLoginActivity : ComponentActivity() {
         val userAgentExtra = intent.getStringExtra(EXTRA_USER_AGENT)
 
         val webView = WebView(this)
+        this.webView = webView
         webView.layoutParams = ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
         )
@@ -58,6 +107,13 @@ class CasLoginActivity : ComponentActivity() {
             javaScriptEnabled = true
             domStorageEnabled = true
             mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+            // 安全收紧：禁止文件/内容访问，禁止 JS 自动打开窗口（保留 JS 与缩放，教务页需要）
+            javaScriptCanOpenWindowsAutomatically = false
+            setSupportMultipleWindows(false)
+            @Suppress("DEPRECATION")
+            setAllowFileAccess(false)
+            @Suppress("DEPRECATION")
+            setAllowContentAccess(false)
             when {
                 userAgentExtra == null -> userAgentString = CasLoginClient.BROWSER_UA
                 userAgentExtra.isNotEmpty() -> userAgentString = userAgentExtra
@@ -82,12 +138,33 @@ class CasLoginActivity : ComponentActivity() {
                 if (urlBlacklist.any { url.contains(it) }) return
                 val cookies = CookieManager.getInstance().getCookie(url) ?: return
                 if (!cookies.contains(cookieMarker)) return
+                // 登录成功：取消超时守卫，取消定时器并回传 Cookie
+                timeoutGuard?.let { mainHandler.removeCallbacks(it) }
+                timeoutGuard = null
                 done = true
                 setResult(RESULT_OK, Intent().putExtra(EXTRA_COOKIES, cookies))
                 finish()
             }
+
+            override fun onReceivedError(
+                view: WebView?,
+                errorCode: Int,
+                description: String?,
+                failingUrl: String?,
+            ) {
+                super.onReceivedError(view, errorCode, description, failingUrl)
+                if (done) return
+                Toast.makeText(
+                    this@CasLoginActivity,
+                    getString(R.string.cas_login_load_failed, errorCode, description ?: "null"),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
         }
         setContentView(webView)
         webView.loadUrl(startUrl)
+        val timeout = TimeoutGuard()
+        timeoutGuard = timeout
+        mainHandler.postDelayed(timeout, LOGIN_TIMEOUT_MS)
     }
 }

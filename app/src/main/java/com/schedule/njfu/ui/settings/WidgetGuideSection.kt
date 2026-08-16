@@ -27,7 +27,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.schedule.njfu.R
 
 /**
  * 设置页内嵌的「桌面小组件添加引导」。
@@ -43,10 +45,10 @@ fun WidgetGuideSection() {
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("桌面小组件", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.widget_guide_title), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             Text(
-                "如何把小组件添加到手机桌面",
+                stringResource(R.string.widget_guide_subtitle),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -54,10 +56,10 @@ fun WidgetGuideSection() {
             Spacer(Modifier.height(12.dp))
 
             // 通用三步
-            Text("通用步骤", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.widget_guide_general_title), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(4.dp))
-            WidgetGuideData.generalSteps.forEachIndexed { index, step ->
-                NumberedStepRow(index = index, text = step)
+            WidgetGuideData.generalSteps.forEachIndexed { index, stepRes ->
+                NumberedStepRow(index = index, text = stringResource(stepRes))
             }
 
             Spacer(Modifier.height(16.dp))
@@ -65,7 +67,7 @@ fun WidgetGuideSection() {
             Spacer(Modifier.height(12.dp))
 
             // 按品牌查看
-            Text("按手机品牌查看", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.widget_guide_by_brand), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(4.dp))
             WidgetGuideData.vendors.forEach { vendor ->
                 VendorItem(vendor = vendor)
@@ -76,7 +78,7 @@ fun WidgetGuideSection() {
             Spacer(Modifier.height(12.dp))
 
             // 常见问题
-            Text("常见问题", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.widget_guide_faq_title), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(4.dp))
             WidgetGuideData.faqs.forEach { faq ->
                 FaqItem(faq = faq)
@@ -124,21 +126,22 @@ private fun VendorItem(vendor: VendorGuide) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                vendor.name,
+                stringResource(vendor.nameRes),
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.weight(1f),
             )
             Icon(
                 if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                contentDescription = if (expanded) "收起" else "展开",
+                contentDescription = if (expanded) stringResource(R.string.widget_guide_collapse)
+                else stringResource(R.string.widget_guide_expand),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         if (expanded) {
             Column(Modifier.animateContentSize()) {
-                vendor.steps.forEach { step ->
+                vendor.stepsRes.forEach { stepRes ->
                     Text(
-                        "·  $step",
+                        "·  " + stringResource(stepRes),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
@@ -168,19 +171,20 @@ private fun FaqItem(faq: FaqGuide) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                faq.question,
+                stringResource(faq.questionRes),
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.weight(1f),
             )
             Icon(
                 if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                contentDescription = if (expanded) "收起" else "展开",
+                contentDescription = if (expanded) stringResource(R.string.widget_guide_collapse)
+                else stringResource(R.string.widget_guide_expand),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         if (expanded) {
             Text(
-                faq.answer,
+                stringResource(faq.answerRes),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier

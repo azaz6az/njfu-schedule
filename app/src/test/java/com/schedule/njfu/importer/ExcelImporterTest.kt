@@ -57,4 +57,54 @@ class ExcelImporterTest {
         assertTrue(com.schedule.njfu.model.WeekUtils.contains(oddOnly.weeks, 5))
         assertFalse(com.schedule.njfu.model.WeekUtils.contains(oddOnly.weeks, 6))
     }
+
+    @Test
+    fun `chinese weekdays are parsed`() {
+        fun parse(dayCell: String): Int? {
+            val out = ByteArrayOutputStream()
+            val wb = Workbook(out, "test", "1.0")
+            val ws: Worksheet = wb.newWorksheet("Sheet1")
+            ws.value(0, 0, "课程名"); ws.value(0, 3, "星期")
+            ws.value(1, 0, "课"); ws.value(1, 3, dayCell); ws.value(1, 4, "1"); ws.value(1, 6, "1-16")
+            wb.finish()
+            return ExcelImporter.parse(ByteArrayInputStream(out.toByteArray()))
+                .firstOrNull()?.dayOfWeek
+        }
+        assertEquals(1, parse("星期一"))
+        assertEquals(3, parse("周三"))
+        assertEquals(5, parse("星期五"))
+        assertEquals(7, parse("周日"))
+        assertEquals(7, parse("星期天"))
+    }
+
+    @Test
+    fun `invalid weekday row is skipped and logged`() {
+        val out = ByteArrayOutputStream()
+        val wb = Workbook(out, "test", "1.0")
+        val ws: Worksheet = wb.newWorksheet("Sheet1")
+        // 合法行 + 非法星期行 + 合法行
+        ws.value(0, 0, "课程名"); ws.value(0, 3, "星期"); ws.value(0, 4, "开始节")
+        ws.value(1, 0, "高等数学"); ws.value(1, 3, "1"); ws.value(1, 4, "1")
+        ws.value(2, 0, "坏星期课"); ws.value(2, 3, "星期八"); ws.value(2, 4, "1")
+        ws.value(3, 0, "线性代数"); ws.value(3, 3, "2"); ws.value(3, 4, "3")
+        wb.finish()
+        val courses = ExcelImporter.parse(ByteArrayInputStream(out.toByteArray()))
+        assertEquals("非法星期行应被跳过", 2, courses.size)
+        assertEquals("高等数学", courses[0].name)
+        assertEquals("线性代数", courses[1].name)
+    }
+
+    @Test
+    fun `invalid start period row is skipped and logged`() {
+        val out = ByteArrayOutputStream()
+        val wb = Workbook(out, "test", "1.0")
+        val ws: Worksheet = wb.newWorksheet("Sheet1")
+        ws.value(0, 0, "课程名"); ws.value(0, 3, "星期"); ws.value(0, 4, "开始节")
+        ws.value(1, 0, "高等数学"); ws.value(1, 3, "1"); ws.value(1, 4, "1")
+        ws.value(2, 0, "坏节课"); ws.value(2, 3, "3"); ws.value(2, 4, "abc")
+        ws.value(3, 0, "线性代数"); ws.value(3, 3, "2"); ws.value(3, 4, "3")
+        wb.finish()
+        val courses = ExcelImporter.parse(ByteArrayInputStream(out.toByteArray()))
+        assertEquals("非法开始节行应被跳过", 2, courses.size)
+    }
 }

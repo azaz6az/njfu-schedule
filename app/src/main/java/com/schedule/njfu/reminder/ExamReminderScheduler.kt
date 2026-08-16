@@ -1,7 +1,6 @@
 package com.schedule.njfu.reminder
 
 import android.app.AlarmManager
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -10,16 +9,31 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.schedule.njfu.MainActivity
+import com.schedule.njfu.R
 import com.schedule.njfu.data.AppDatabase
 import com.schedule.njfu.data.SettingsKeys
 import com.schedule.njfu.model.Exam
+import com.schedule.njfu.util.DebugLog
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.ZoneId
 
 /** 考试当天提醒的 requestCode 偏移（与提前提醒区分，避免互相覆盖） */
 private const val TODAY_OFFSET = 0x10000
+
+/**
+ * 计算考试的两个提醒触发 epoch（毫秒）：
+ * [examDate] 提前 [daysBefore] 天 09:00（预告）与当天 08:00（临场）。
+ * 参数化日期便于纯函数单测。
+ */
+internal fun examReminderEpochs(examDate: LocalDate, daysBefore: Int): Pair<Long, Long> {
+    val zone = ZoneId.systemDefault()
+    val advance = examDate.minusDays(daysBefore.toLong()).atTime(9, 0)
+        .atZone(zone).toInstant().toEpochMilli()
+    val dayOf = examDate.atTime(8, 0)
+        .atZone(zone).toInstant().toEpochMilli()
+    return advance to dayOf
+}
 
 class ExamReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -37,9 +51,7 @@ class ExamReminderReceiver : BroadcastReceiver() {
         if (!stillValid) return
 
         val nm = context.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(
-            NotificationChannel("exams", "考试提醒", NotificationManager.IMPORTANCE_HIGH),
-        )
+        // 渠道已在 App.onCreate 统一创建，这里只负责通知
         val notification = NotificationCompat.Builder(context, "exams")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
@@ -53,7 +65,7 @@ class ExamReminderReceiver : BroadcastReceiver() {
                 ),
             )
             .build()
-        nm.notify("exam_$examId", examId.toInt(), notification)
+        nm.notify("exam_$examId", (examId and 0x7FFFFFFF).toInt(), notification)
     }
 }
 
@@ -77,20 +89,22 @@ object ExamReminderScheduler {
                 cancel(context, am, exam)
                 return@forEach
             }
+            val (advanceEpoch, dayEpoch) = examReminderEpochs(examDate, days)
             // 提前 N 天 09:00：预告提醒
             schedule(
                 context, am, exam,
-                trigger = examDate.minusDays(days.toLong()).atTime(9, 0),
+                epoch = advanceEpoch,
                 requestOffset = 0,
-                title = if (days == 1) "明天有考试" else "$days 天后有考试",
+                title = if (days == 1) context.getString(R.string.notification_exam_tomorrow)
+                else context.getString(R.string.notification_exam_in_days, days),
                 examDate = examDate,
             )
             // 考试当天 08:00：临场提醒
             schedule(
                 context, am, exam,
-                trigger = examDate.atTime(8, 0),
+                epoch = dayEpoch,
                 requestOffset = TODAY_OFFSET,
-                title = "今天有考试",
+                title = context.getString(R.string.notification_exam_today),
                 examDate = examDate,
             )
         }
@@ -100,25 +114,37 @@ object ExamReminderScheduler {
         context: Context,
         am: AlarmManager,
         exam: Exam,
-        trigger: LocalDateTime,
+        epoch: Long,
         requestOffset: Int,
         title: String,
         examDate: LocalDate,
     ) {
-        val epoch = trigger.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val now = System.currentTimeMillis()
         val pi = pendingIntent(context, exam, requestOffset, title, examDate)
         if (epoch <= now) {
             // 触发时间已过：取消旧闹钟，避免 setExact 立即触发
             am.cancel(pi)
         } else {
-            setExactSafely(am, epoch, pi)
+            setExactSafely(context, am, epoch, pi)
         }
     }
 
-    /** Android 12+ 需「闹钟与提醒」授权才能精确闹钟；未授权/抛 SecurityException 时静默跳过 */
-    private fun setExactSafely(am: AlarmManager, trigger: Long, pi: PendingIntent) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) return
+    /**
+     * Android 12+ 需「闹钟与提醒」授权才能精确闹钟。
+     * 未授权时不静默跳过，降级为 [AlarmManager.setWindow]（±60s 窗口）+ 记录日志；
+     * 仍保留对 SecurityException 的兜底。
+     */
+    private fun setExactSafely(context: Context, am: AlarmManager, trigger: Long, pi: PendingIntent) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) {
+            DebugLog.write(
+                context.applicationContext,
+                "ExamReminderScheduler: no SCHEDULE_EXACT_ALARM, fallback to setWindow",
+            )
+            runCatching {
+                am.setWindow(AlarmManager.RTC_WAKEUP, trigger, 60_000, pi)
+            }
+            return
+        }
         runCatching { am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pi) }
     }
 
@@ -140,9 +166,11 @@ object ExamReminderScheduler {
             .putExtra("title", title)
             .putExtra("exam_name", exam.name)
             .putExtra("location", exam.location)
+        // 用 Long 运算避免 Int 加法溢出折叠；requestCode 取非符号位
+        val requestCode = ((exam.id + requestOffset) and 0x7FFFFFFF).toInt()
         return PendingIntent.getBroadcast(
             context,
-            exam.id.toInt() + requestOffset,
+            requestCode,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )

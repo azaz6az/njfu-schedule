@@ -48,6 +48,26 @@ class HolidayUtilsTest {
     }
 
     @Test
+    fun `serialize emits ISO keys in stable sorted order`() {
+        // 与 parseShifts 使用同一 kotlinx.serialization json 实例，编解码对称；
+        // 键为 LocalDate.toString() 的 ISO 字符串，Map<String, Int> 序列化无引号转义
+        val shifts = mapOf(
+            LocalDate.parse("2025-10-11") to 1,
+            LocalDate.parse("2025-09-28") to 5,
+        )
+        val json = HolidayUtils.serializeShifts(shifts)
+        assertEquals("""{"2025-09-28":5,"2025-10-11":1}""", json)
+        assertEquals(shifts, HolidayUtils.parseShifts(json))
+    }
+
+    @Test
+    fun `serialize preserves day-off zero values`() {
+        val json = HolidayUtils.serializeShifts(mapOf(LocalDate.parse("2025-10-08") to 0))
+        assertEquals("""{"2025-10-08":0}""", json)
+        assertEquals(0, HolidayUtils.parseShifts(json)[LocalDate.parse("2025-10-08")])
+    }
+
+    @Test
     fun `shifted day returns mapping when present`() {
         val shifts = mapOf(LocalDate.parse("2025-10-11") to 1)
         // 2025-10-11 是周六（自然星期 6），映射为周一（1）

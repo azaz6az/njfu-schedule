@@ -45,8 +45,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.schedule.njfu.R
 import com.schedule.njfu.data.ImportDiff
 import com.schedule.njfu.importer.School
 import com.schedule.njfu.importer.gxu.GxuParser
@@ -77,21 +79,20 @@ private class SchoolPrefsSaver(private val prefs: SharedPreferences) : Saver<Sch
 private fun ImportDiffSummary(diff: ImportDiff) {
     Column {
         Text(
-            "解析到 ${diff.incomingSize} 门课程，与现有课表对比：",
+            stringResource(R.string.import_diff_summary, diff.incomingSize),
             style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(Modifier.height(6.dp))
-        Text("• 新增 ${diff.added.size} 门", style = MaterialTheme.typography.bodyMedium)
-        Text("• 删除 ${diff.removed.size} 门", style = MaterialTheme.typography.bodyMedium)
-        Text("• 变更 ${diff.changed.size} 门", style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(R.string.import_diff_added, diff.added.size), style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(R.string.import_diff_removed, diff.removed.size), style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(R.string.import_diff_changed, diff.changed.size), style = MaterialTheme.typography.bodyMedium)
         if (diff.unchanged.isNotEmpty()) {
-            Text("• 不变 ${diff.unchanged.size} 门", style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.import_diff_unchanged, diff.unchanged.size), style = MaterialTheme.typography.bodyMedium)
         }
         if (diff.conflicts.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
             Text(
-                "⚠ 新数据中有 ${diff.conflicts.size} 处时间冲突（同一时间多门课），" +
-                    "导入后同格课程将并排显示",
+                stringResource(R.string.import_diff_conflict, diff.conflicts.size),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )
@@ -102,6 +103,7 @@ private fun ImportDiffSummary(diff: ImportDiff) {
 @Composable
 fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val isImporting by viewModel.isImporting.collectAsStateWithLifecycle()
     val loading = state is ImportViewModel.UiState.Loading
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
@@ -160,10 +162,10 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
     ) {
-        Text("导入课程表", style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.import_title), style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(4.dp))
         Text(
-            "在应用内置浏览器登录教务系统即可自动导入；登录异常时可用教务导出的课表文件兜底。",
+            stringResource(R.string.import_subtitle),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -177,7 +179,7 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         ) {
             Column(Modifier.padding(16.dp)) {
-                Text("自动导入", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.import_auto), style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     School.entries.forEach { school ->
@@ -190,7 +192,7 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "打开教务系统登录页，输入学号密码（如需验证码直接在页面内输入），登录成功后自动抓取本学期课表。",
+                    stringResource(R.string.import_auto_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -198,13 +200,13 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
                     Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         val label = if (xnm.isNotEmpty() && xqm.isNotEmpty()) {
-                            "将导入 ${GxuParser.semesterLabel(xnm, xqm)}"
+                            stringResource(R.string.import_will_import, GxuParser.semesterLabel(xnm, xqm))
                         } else {
-                            "请选择学期"
+                            stringResource(R.string.import_select_semester)
                         }
                         Text(label, style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.width(8.dp))
-                        TextButton(onClick = { showSemesterDialog = true }) { Text("修改") }
+                        TextButton(onClick = { showSemesterDialog = true }) { Text(stringResource(R.string.import_modify)) }
                     }
                 }
                 Spacer(Modifier.height(12.dp))
@@ -234,7 +236,7 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
                     enabled = !loading && (selectedSchool != School.GXU || (xnm.isNotEmpty() && xqm.isNotEmpty())),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(50),
-                ) { Text("登录教务系统并导入") }
+                ) { Text(stringResource(R.string.import_login_and_import)) }
                 Spacer(Modifier.height(12.dp))
                 when (val s = state) {
                     is ImportViewModel.UiState.Loading -> Row(verticalAlignment = Alignment.CenterVertically) {
@@ -247,7 +249,7 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
                         if (s.fixedWeeks > 0) {
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                "${s.fixedWeeks} 门课程周次信息缺失，将按全学期显示（可在课表里点开修正）",
+                                stringResource(R.string.import_fixed_weeks, s.fixedWeeks),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.tertiary,
                             )
@@ -255,7 +257,7 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
                         if (s.examFailed) {
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                "考试安排获取失败，本次仅导入课表",
+                                stringResource(R.string.import_exam_failed),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.tertiary,
                             )
@@ -264,29 +266,40 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
                                 onClick = { viewModel.confirmImport() },
+                                // 写库进行中禁用，防止双击并发执行两次 replaceAll
+                                enabled = !isImporting,
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(50),
-                            ) { Text("确认导入") }
+                            ) {
+                                Text(
+                                    if (isImporting) stringResource(R.string.import_importing)
+                                    else stringResource(R.string.import_confirm),
+                                )
+                            }
                             OutlinedButton(
                                 onClick = { viewModel.cancelImport() },
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(50),
-                            ) { Text("取消") }
+                            ) { Text(stringResource(R.string.action_cancel)) }
                         }
                         Text(
-                            "确认后将替换现有课表数据（建议先到设置页导出备份）",
+                            stringResource(R.string.import_confirm_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     is ImportViewModel.UiState.Done -> Column {
-                        val extra = if (s.fixedWeeks > 0) "（" + s.fixedWeeks + " 门周次信息缺失，已按全学期显示，可在课表里点开修正）" else ""
+                        val extra = if (s.fixedWeeks > 0) {
+                            stringResource(R.string.import_success_fixed_weeks_suffix, s.fixedWeeks)
+                        } else {
+                            ""
+                        }
                         Text(
-                            "成功导入 " + s.courseCount + " 门课程" + extra,
+                            stringResource(R.string.import_success, s.courseCount) + extra,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary,
                         )
-                        TextButton(onClick = onDone) { Text("去课表看看") }
+                        TextButton(onClick = onDone) { Text(stringResource(R.string.import_goto_schedule)) }
                     }
                     is ImportViewModel.UiState.Error -> Column {
                         Text(
@@ -295,7 +308,7 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
                             color = MaterialTheme.colorScheme.error,
                         )
                         Text(
-                            "可检查网络后重试，或使用下方手动导入",
+                            stringResource(R.string.import_error_suggestion),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -314,11 +327,10 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         ) {
             Column(Modifier.padding(16.dp)) {
-                Text("手动导入", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.import_manual), style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "教务系统网页端「学生个人课表」导出的课表文件；" +
-                        "另支持 JSON（备份导出文件）、ICS（日历导出）和 Excel（xlsx）。",
+                    stringResource(R.string.import_manual_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -330,21 +342,21 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
                     enabled = !loading,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(50),
-                ) { Text("从教务导出的课表（.xls）导入") }
+                ) { Text(stringResource(R.string.import_from_xls)) }
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(
                     onClick = { showJsonDialog = true },
                     enabled = !loading,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(50),
-                ) { Text("从 JSON 导入") }
+                ) { Text(stringResource(R.string.import_from_json)) }
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(
                     onClick = { showIcsDialog = true },
                     enabled = !loading,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(50),
-                ) { Text("从 ICS 导入") }
+                ) { Text(stringResource(R.string.import_from_ics)) }
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(
                     onClick = {
@@ -353,7 +365,7 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
                     enabled = !loading,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(50),
-                ) { Text("从 Excel（xlsx）导入") }
+                ) { Text(stringResource(R.string.import_from_excel_xlsx)) }
             }
         }
     }
@@ -372,8 +384,8 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
     }
     if (showJsonDialog) {
         PasteTextDialog(
-            title = "从 JSON 导入",
-            hint = "粘贴 JSON 备份内容（课程数组或完整备份对象）",
+            title = stringResource(R.string.import_from_json),
+            hint = stringResource(R.string.import_paste_json_hint),
             onConfirm = { text ->
                 viewModel.manualJson(text)
                 showJsonDialog = false
@@ -383,8 +395,8 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
     }
     if (showIcsDialog) {
         PasteTextDialog(
-            title = "从 ICS 导入",
-            hint = "粘贴 ICS 日历内容（含 BEGIN:VEVENT 的文本）",
+            title = stringResource(R.string.import_from_ics),
+            hint = stringResource(R.string.import_paste_ics_hint),
             onConfirm = { text ->
                 viewModel.manualIcs(text)
                 showIcsDialog = false
@@ -408,9 +420,9 @@ private fun SemesterDialog(
     val thisYear = LocalDate.now().year
     val years = (thisYear - 2..thisYear + 2).toList()
     val terms = listOf(
-        "3" to "第 1 学期（秋）",
-        "12" to "第 2 学期（春）",
-        "16" to "第 3 学期（夏）",
+        "3" to stringResource(R.string.import_term_1),
+        "12" to stringResource(R.string.import_term_2),
+        "16" to stringResource(R.string.import_term_3),
     )
     var year by remember { mutableStateOf(currentXnm.ifEmpty { thisYear.toString() }) }
     var xqm by remember { mutableStateOf(currentXqm.ifEmpty { "3" }) }
@@ -419,10 +431,10 @@ private fun SemesterDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("选择学期") },
+        title = { Text(stringResource(R.string.import_semester_title)) },
         text = {
             Column {
-                Text("学年", style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(R.string.import_semester_year), style = MaterialTheme.typography.labelMedium)
                 Spacer(Modifier.height(4.dp))
                 Box {
                     OutlinedButton(
@@ -439,13 +451,18 @@ private fun SemesterDialog(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                Text("学期", style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(R.string.import_semester_term), style = MaterialTheme.typography.labelMedium)
                 Spacer(Modifier.height(4.dp))
                 Box {
                     OutlinedButton(
                         onClick = { termOpen = true },
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text(terms.firstOrNull { it.first == xqm }?.second ?: "请选择") }
+                    ) {
+                        Text(
+                            terms.firstOrNull { it.first == xqm }?.second
+                                ?: stringResource(R.string.import_term_placeholder),
+                        )
+                    }
                     DropdownMenu(expanded = termOpen, onDismissRequest = { termOpen = false }) {
                         terms.forEach { (code, label) ->
                             DropdownMenuItem(
@@ -458,9 +475,9 @@ private fun SemesterDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(year, xqm) }) { Text("确定") }
+            TextButton(onClick = { onConfirm(year, xqm) }) { Text(stringResource(R.string.action_confirm)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
 }
 
@@ -479,15 +496,17 @@ private fun PasteTextDialog(
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
-                label = { Text("内容") },
+                label = { Text(stringResource(R.string.import_paste_content_label)) },
                 placeholder = { Text(hint) },
                 minLines = 6,
                 modifier = Modifier.fillMaxWidth(),
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(text) }, enabled = text.isNotBlank()) { Text("导入") }
+            TextButton(onClick = { onConfirm(text) }, enabled = text.isNotBlank()) {
+                Text(stringResource(R.string.import_paste_confirm))
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
 }

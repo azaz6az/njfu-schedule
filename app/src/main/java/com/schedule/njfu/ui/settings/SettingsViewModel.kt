@@ -12,6 +12,7 @@ import com.schedule.njfu.data.SettingsKeys
 import com.schedule.njfu.data.credentials.CredentialStore
 import com.schedule.njfu.data.defaultSemesterStart
 import com.schedule.njfu.data.semesterStart
+import com.schedule.njfu.R
 import com.schedule.njfu.importer.ExcelImporter
 import com.schedule.njfu.importer.IcsImporter
 import com.schedule.njfu.importer.JsonImporter
@@ -19,8 +20,16 @@ import com.schedule.njfu.model.HolidayUtils
 import com.schedule.njfu.reminder.ExamReminderScheduler
 import com.schedule.njfu.reminder.ReminderScheduler
 import com.schedule.njfu.util.DebugLog
+import com.schedule.njfu.widget.ExamCountdownWidgetProvider
+import com.schedule.njfu.widget.NextClassWidgetProvider
+import com.schedule.njfu.widget.ScheduleWidgetProvider
+import com.schedule.njfu.widget.TodayWidgetProvider
+import com.schedule.njfu.widget.WeekWidgetProvider
+import com.schedule.njfu.widget.WidgetTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
@@ -32,6 +41,7 @@ class SettingsViewModel(private val db: AppDatabase, private val context: Contex
     val examRemindEnabled = MutableStateFlow(true)
     val examRemindDays = MutableStateFlow(1)
     val username = MutableStateFlow("")
+    val widgetTheme = MutableStateFlow(WidgetTheme.DEFAULT_KEY)
 
     private val repo = ScheduleRepository(db)
 
@@ -42,6 +52,8 @@ class SettingsViewModel(private val db: AppDatabase, private val context: Contex
             examRemindEnabled.value = db.settingsDao().get(SettingsKeys.EXAM_REMIND_ENABLED) != "0"
             examRemindDays.value = db.settingsDao().get(SettingsKeys.EXAM_REMIND_DAYS)?.toIntOrNull() ?: 1
             username.value = CredentialStore(context).load()?.first ?: ""
+            widgetTheme.value =
+                db.settingsDao().get(SettingsKeys.WIDGET_THEME) ?: WidgetTheme.DEFAULT_KEY
         }
     }
 
@@ -108,6 +120,21 @@ class SettingsViewModel(private val db: AppDatabase, private val context: Contex
             val arr = JSONArray()
             times.forEach { (p, t) -> arr.put(JSONObject().put("p", p).put("t", t)) }
             db.settingsDao().put(SettingsEntity(SettingsKeys.PERIOD_TIMES, arr.toString()))
+            // 节次时间影响今日提醒的触发时刻，改后需重排
+            ReminderScheduler.rescheduleToday(context)
+        }
+    }
+
+    /** 保存小组件主题并即时刷新全部已添加的小组件 */
+    fun saveWidgetTheme(key: String) {
+        viewModelScope.launch {
+            db.settingsDao().put(SettingsEntity(SettingsKeys.WIDGET_THEME, key))
+            widgetTheme.value = key
+            ScheduleWidgetProvider.refreshAll(context)
+            WeekWidgetProvider.refreshAll(context)
+            NextClassWidgetProvider.refreshAll(context)
+            TodayWidgetProvider.refreshAll(context)
+            ExamCountdownWidgetProvider.refreshAll(context)
         }
     }
 
@@ -116,29 +143,29 @@ class SettingsViewModel(private val db: AppDatabase, private val context: Contex
     }
 
     /** 从 JSON 文本导入课程（替换现有数据），返回导入课程数 */
-    suspend fun importFromJson(text: String): Int {
+    suspend fun importFromJson(text: String): Int = withContext(Dispatchers.IO) {
         val courses = JsonImporter.import(text)
-        require(courses.isNotEmpty()) { "未解析到任何课程" }
+        require(courses.isNotEmpty()) { context.getString(R.string.import_error_no_courses) }
         repo.replaceAll(courses)
-        return courses.size
+        courses.size
     }
 
     /** 从 ICS 文本导入课程（替换现有数据），返回导入课程数 */
-    suspend fun importFromIcs(text: String): Int {
-        val courses = IcsImporter.parse(text)
-        require(courses.isNotEmpty()) { "未解析到任何课程" }
+    suspend fun importFromIcs(text: String): Int = withContext(Dispatchers.IO) {
+        val courses = IcsImporter.parse(text, db.settingsDao().semesterStart())
+        require(courses.isNotEmpty()) { context.getString(R.string.import_error_no_courses) }
         repo.replaceAll(courses)
-        return courses.size
+        courses.size
     }
 
     /** 从 Excel 文件导入课程（替换现有数据），返回导入课程数 */
-    suspend fun importFromExcel(uri: Uri): Int {
+    suspend fun importFromExcel(uri: Uri): Int = withContext(Dispatchers.IO) {
         val input = context.contentResolver.openInputStream(uri)
-            ?: error("无法打开文件")
+            ?: error(context.getString(R.string.error_cannot_open_file))
         val courses = input.use { ExcelImporter.parse(it) }
-        require(courses.isNotEmpty()) { "未解析到任何课程" }
+        require(courses.isNotEmpty()) { context.getString(R.string.import_error_no_courses) }
         repo.replaceAll(courses)
-        return courses.size
+        courses.size
     }
 
     /** 将课程与考试导出为 JSON 备份文件，返回课程数 */
@@ -147,7 +174,7 @@ class SettingsViewModel(private val db: AppDatabase, private val context: Contex
         val exams = db.examDao().getAll().map { it.toModel() }
         val json = JsonImporter.export(courses, exams)
         val out = context.contentResolver.openOutputStream(uri)
-            ?: error("无法创建文件")
+            ?: error(context.getString(R.string.error_cannot_create_file))
         out.use { it.write(json.toByteArray()) }
         return courses.size
     }
@@ -155,9 +182,9 @@ class SettingsViewModel(private val db: AppDatabase, private val context: Contex
     /** 导出调试日志（App 启动记录、崩溃堆栈、小部件渲染失败原因），供问题排查 */
     suspend fun exportDebugLog(uri: Uri) {
         val log = DebugLog.read(context)
-        require(log.isNotBlank()) { "暂无调试日志" }
+        require(log.isNotBlank()) { context.getString(R.string.error_no_debug_log) }
         val out = context.contentResolver.openOutputStream(uri)
-            ?: error("无法创建文件")
+            ?: error(context.getString(R.string.error_cannot_create_file))
         out.use { it.write(log.toByteArray(Charsets.UTF_8)) }
     }
 
@@ -168,8 +195,9 @@ class SettingsViewModel(private val db: AppDatabase, private val context: Contex
         }
     }
 
-    class Factory(private val db: AppDatabase, private val context: Context) : ViewModelProvider.Factory {
+    class Factory(private val db: AppDatabase, context: Context) : ViewModelProvider.Factory {
+        private val appContext = context.applicationContext
         @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T = SettingsViewModel(db, context) as T
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = SettingsViewModel(db, appContext) as T
     }
 }

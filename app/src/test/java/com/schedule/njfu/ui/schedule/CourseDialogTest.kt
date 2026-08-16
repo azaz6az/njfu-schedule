@@ -1,5 +1,6 @@
 package com.schedule.njfu.ui.schedule
 
+import android.content.Context
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -8,6 +9,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
+import com.schedule.njfu.R
 import com.schedule.njfu.model.Course
 import com.schedule.njfu.model.WeekUtils
 import org.junit.Assert.assertEquals
@@ -17,6 +19,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 /**
@@ -30,6 +33,9 @@ class CourseDialogTest {
 
     @get:Rule
     val composeRule = createComposeRule()
+
+    /** 文案断言统一走资源，避免硬编码中文（值与原实现一致） */
+    private val ctx: Context = RuntimeEnvironment.getApplication()
 
     /** 按输入框 label 定位可输入节点（不依赖节点遍历顺序） */
     private fun ComposeContentTestRule.field(label: String) =
@@ -48,13 +54,13 @@ class CourseDialogTest {
                 onDismiss = {},
             )
         }
-        composeRule.field("课程名称").performTextReplacement("高等数学")
-        composeRule.field("教师").performTextReplacement("张老师")
-        composeRule.field("地点").performTextReplacement("教A101")
-        composeRule.field("开始节").performTextReplacement("2")
-        composeRule.field("结束节").performTextReplacement("4")
+        composeRule.field(ctx.getString(R.string.course_name_label)).performTextReplacement("高等数学")
+        composeRule.field(ctx.getString(R.string.course_teacher_label)).performTextReplacement("张老师")
+        composeRule.field(ctx.getString(R.string.course_location_label)).performTextReplacement("教A101")
+        composeRule.field(ctx.getString(R.string.course_start_period_label)).performTextReplacement("2")
+        composeRule.field(ctx.getString(R.string.course_end_period_label)).performTextReplacement("4")
 
-        composeRule.onNodeWithText("保存").performClick()
+        composeRule.onNodeWithText(ctx.getString(R.string.action_save)).performClick()
         composeRule.waitForIdle()
 
         assertNotNull(saved)
@@ -82,14 +88,17 @@ class CourseDialogTest {
                 onDismiss = {},
             )
         }
-        composeRule.field("课程名称").performTextReplacement("体育")
-        composeRule.field("开始节").performTextReplacement("5")
-        composeRule.field("结束节").performTextReplacement("3")  // 结束节 < 开始节 → 非法
+        composeRule.field(ctx.getString(R.string.course_name_label)).performTextReplacement("体育")
+        composeRule.field(ctx.getString(R.string.course_start_period_label)).performTextReplacement("5")
+        composeRule.field(ctx.getString(R.string.course_end_period_label)).performTextReplacement("3")  // 结束节 < 开始节 → 非法
 
-        composeRule.onNodeWithText("保存").performClick()
+        composeRule.onNodeWithText(ctx.getString(R.string.action_save)).performClick()
         composeRule.waitForIdle()
 
         assertEquals(null, saved)
-        composeRule.onNodeWithText("结束节需在 5..12 之间", substring = true).assertExists()
+        composeRule.onNodeWithText(
+            ctx.getString(R.string.course_error_end_period, 5, WeekGrid.MAX_PERIODS),
+            substring = true,
+        ).assertExists()
     }
 }

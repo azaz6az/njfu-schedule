@@ -28,20 +28,31 @@ class ScheduleViewModel(private val db: AppDatabase) : ViewModel() {
 
     val currentWeek = MutableStateFlow(0)
     val selectedWeek = MutableStateFlow(0)
-    val semesterStart = MutableStateFlow(LocalDate.now())
+    /** 初始为 null，避免异步加载完成前闪现错误的周差；加载完成后为学期起始日(周一) */
+    val semesterStart = MutableStateFlow<LocalDate?>(null)
     /** 调休映射：日期 → 按周几显示（设置页维护） */
     val shifts = MutableStateFlow<Map<LocalDate, Int>>(emptyMap())
 
     fun initIfNeeded() {
         viewModelScope.launch {
-            val start = db.settingsDao().semesterStart()
-            semesterStart.value = start
-            shifts.value = HolidayUtils.parseShifts(db.settingsDao().get(SettingsKeys.HOLIDAY_SHIFTS))
-            val week = WeekUtils.currentWeek(start, LocalDate.now())
-            currentWeek.value = week
-            if (selectedWeek.value == 0) {
-                selectedWeek.value = week
-            }
+            refreshDayState()
+        }
+    }
+
+    /**
+     * 重读学期起始日并重算 currentWeek/today 相关状态。
+     * 定时刷新（跨零点/跨周一）时调用，保证「本周」高亮与 isCurrentWeek 不失效。
+     * 保持与现有状态结构兼容：只更新 semesterStart/currentWeek/shifts，selectedWeek 已确定时不动。
+     */
+    suspend fun refreshDayState() {
+        val start = db.settingsDao().semesterStart()
+        semesterStart.value = start
+        shifts.value = HolidayUtils.parseShifts(db.settingsDao().get(SettingsKeys.HOLIDAY_SHIFTS))
+        val week = WeekUtils.currentWeek(start, LocalDate.now())
+        currentWeek.value = week
+        // selectedWeek 只在首次初始化时从当前周落下，避免用户手动浏览周次时被刷新打断
+        if (selectedWeek.value == 0) {
+            selectedWeek.value = week
         }
     }
 

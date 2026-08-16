@@ -66,19 +66,25 @@ class ExamCountdownWidgetProvider : AppWidgetProvider() {
         views.setTextColor(R.id.exam_course, palette.textSecondary)
 
         if (exam == null) {
-            views.setTextViewText(R.id.exam_label, "下一场考试")
-            views.setTextViewText(R.id.exam_big, "暂无考试安排")
+            views.setTextViewText(R.id.exam_label, context.getString(R.string.widget_exam_label))
+            views.setTextViewText(R.id.exam_big, context.getString(R.string.exam_empty))
             views.setTextColor(R.id.exam_big, palette.textPrimary)
             views.setViewVisibility(R.id.exam_course, View.GONE)
             return views
         }
 
         val (e, days) = exam
-        views.setTextViewText(R.id.exam_big, if (days <= 0) "今天" else "还有 ${days} 天")
+        views.setTextViewText(
+            R.id.exam_big,
+            if (days <= 0) context.getString(R.string.widget_countdown_today)
+            else context.getString(R.string.widget_countdown_in_days, days),
+        )
         views.setTextColor(R.id.exam_big, if (days <= 0) palette.accent else palette.textPrimary)
         views.setViewVisibility(R.id.exam_course, View.VISIBLE)
         val formatted = runCatching {
-            LocalDate.parse(e.date).format(DateTimeFormatter.ofPattern("MM月dd日"))
+            LocalDate.parse(e.date).format(
+                DateTimeFormatter.ofPattern(context.getString(R.string.widget_exam_date_format)),
+            )
         }.getOrElse { e.date }
         views.setTextViewText(R.id.exam_course, "${e.name} · $formatted")
         return views

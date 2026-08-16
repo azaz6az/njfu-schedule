@@ -105,12 +105,22 @@ object JwxtParser {
         val bodies = linkedMapOf<String, String>()
         val chunks = Regex("(?=<div id=\")").split(cellHtml)
         for (chunk in chunks) {
-            val m = Regex("<div id=\"[^\"]+\"\\s+style=\"[^\"]*\"\\s*class=\"([^\"]+)\"")
-                .find(chunk) ?: continue
-            val cls = m.groupValues[1]
+            // 与属性顺序无关：分别提取 div 的 id、class、style，不强制 style 在 class 之前
+            val open = Regex("<div\\b[^>]*>").find(chunk) ?: continue
+            val openTag = open.value
+            val idAttr = Regex("(?i)\\bid\\s*=\\s*(\"([^\"]*)\"|'([^']*)')").find(openTag)
+                ?.let { m -> m.groupValues[2].ifEmpty { m.groupValues[3] } }
+            val clsAttr = Regex("(?i)\\bclass\\s*=\\s*(\"([^\"]*)\"|'([^']*)')").find(openTag)
+                ?.let { m -> m.groupValues[2].ifEmpty { m.groupValues[3] } }
+            // style 属性不参与匹配逻辑，仅作兼容性提取（属性顺序无关）
+            val styleAttr = Regex("(?i)\\bstyle\\s*=\\s*(\"([^\"]*)\"|'([^']*)')").find(openTag)
+                ?.let { m -> m.groupValues[2].ifEmpty { m.groupValues[3] } }
+            // 三个属性都必须存在（原页面 div 均带 style），但不再要求固定顺序
+            if (idAttr == null || clsAttr == null || styleAttr == null) continue
+            val cls = clsAttr
             if (bodies.containsKey(cls)) continue
             val body = chunk
-                .substring(m.range.last + 1)
+                .substring(open.range.last + 1)
                 .replace(Regex("</div>\\s*$"), "")
             bodies[cls] = body
         }

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -37,28 +38,73 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
+import com.schedule.njfu.R
 import com.schedule.njfu.data.CourseMapper
 import com.schedule.njfu.model.Course
 import com.schedule.njfu.model.HolidayUtils
 import com.schedule.njfu.model.WeekUtils
+import com.schedule.njfu.ui.weekdayName
 import java.time.LocalDate
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
-private val DayLabels = listOf("一", "二", "三", "四", "五", "六", "日")
 private val GutterWidth = 30.dp
 private val HeaderHeight = 34.dp
 private val RowHeight = 48.dp
 private val CourseGap = 3.dp
+
+/** Course 序列化（@Serializable），用于旋转时跨 recomposition 保存弹窗状态 */
+private val CourseJson = Json { encodeDefaults = true; ignoreUnknownKeys = true }
+
+/** [DialogState] 的 rememberSaveable Saver：course 以 JSON 字符串保存（null 存空串），weekDay/weekNumber 原样保存 */
+private val DialogStateSaver = listSaver<DialogState?, Any>(
+    save = { d ->
+        if (d == null) {
+            // null 表示当前无弹窗：不保存任何数据，重建后回落到初始值 null
+            emptyList()
+        } else {
+            listOf(
+                d.course?.let { CourseJson.encodeToString(it) } ?: "",
+                d.weekDay,
+                d.weekNumber,
+            )
+        }
+    },
+    restore = { l ->
+        val courseJson = l.getOrNull(0) as? String ?: ""
+        DialogState(
+            course = courseJson
+                .takeIf { it.isNotEmpty() }
+                ?.let { runCatching { CourseJson.decodeFromString<Course>(it) }.getOrNull() },
+            weekDay = (l.getOrNull(1) as? Int) ?: 1,
+            weekNumber = (l.getOrNull(2) as? Int) ?: 1,
+        )
+    },
+)
+
+/** [Course]（可为 null）的 rememberSaveable Saver */
+private val CourseSaver = listSaver<Course?, Any>(
+    save = { c -> if (c == null) emptyList() else listOf(CourseJson.encodeToString(c)) },
+    restore = { l ->
+        (l.getOrNull(0) as? String)
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { runCatching { CourseJson.decodeFromString<Course>(it) }.getOrNull() }
+    },
+)
 
 @Composable
 fun ScheduleScreen(viewModel: ScheduleViewModel) {
@@ -67,25 +113,33 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
     val currentWeek by viewModel.currentWeek.collectAsStateWithLifecycle()
     val semesterStart by viewModel.semesterStart.collectAsStateWithLifecycle()
     val shifts by viewModel.shifts.collectAsStateWithLifecycle()
-    var dialog by remember { mutableStateOf<DialogState?>(null) }
-    var pendingAdd by remember { mutableStateOf<Course?>(null) }
+    var dialog by rememberSaveable(stateSaver = DialogStateSaver) { mutableStateOf<DialogState?>(null) }
+    var pendingAdd by rememberSaveable(stateSaver = CourseSaver) { mutableStateOf<Course?>(null) }
 
     LaunchedEffect(Unit) { viewModel.initIfNeeded() }
 
-    // 本周（selectedWeek）七天日期：调休映射依赖它
+    // 本周（selectedWeek）七天日期：调休映射依赖它；学期起始日未加载完成时为 null
     val weekDates = remember(selectedWeek, semesterStart) {
-        val monday = semesterStart.plusWeeks((selectedWeek - 1).toLong())
-        (0..6).map { monday.plusDays(it.toLong()) }
+        semesterStart?.let { start ->
+            val monday = start.plusWeeks((selectedWeek - 1).toLong())
+            (0..6).map { monday.plusDays(it.toLong()) }
+        }
     }
     val cells = remember(selectedWeek, courses, weekDates, shifts) {
-        WeekGrid.cellsFor(courses, selectedWeek, weekDates, shifts)
+        if (weekDates == null) emptyList()
+        else WeekGrid.cellsFor(courses, selectedWeek, weekDates, shifts)
     }
-    // 今日日期：每分钟刷新一次，避免跨零点后高亮失效
+    // 今日日期：每分钟刷新一次；检测到跨天（日期变化）时重读学期起始日并重算当前周，
+    // 避免停留在课表页跨过周一零点后「本周」高亮与 isCurrentWeek 失效。
     var today by remember { mutableStateOf(LocalDate.now()) }
     LaunchedEffect(Unit) {
         while (true) {
             delay(60_000)
-            today = LocalDate.now()
+            val now = LocalDate.now()
+            if (now != today) {
+                today = now
+                viewModel.refreshDayState()
+            }
         }
     }
     val todayDay = today.dayOfWeek.value
@@ -100,40 +154,52 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
         ) {
-            WeekSwitcher(
-                selectedWeek = selectedWeek,
-                currentWeek = currentWeek,
-                semesterStart = semesterStart,
-                weekDates = weekDates,
-                shifts = shifts,
-                onPrev = { viewModel.selectWeek(selectedWeek - 1) },
-                onNext = { viewModel.selectWeek(selectedWeek + 1) },
-                onBackToCurrent = { viewModel.selectWeek(currentWeek) },
-            )
-            Box(Modifier.fillMaxWidth()) {
-                WeekGridContent(
-                    cells = cells,
-                    todayDay = highlightDay,
-                    highlightToday = isCurrentWeek && highlightDay > 0,
-                    onCellClick = { day ->
-                        // 点击列加课：星期用该列日期映射后的星期（调休日按映射）
-                        dialog = DialogState(
-                            null,
-                            WeekGrid.mappedDayForColumn(day - 1, weekDates, shifts),
-                            selectedWeek,
-                        )
-                    },
-                    onCourseClick = { c -> dialog = DialogState(c, c.dayOfWeek, selectedWeek) },
+            if (semesterStart == null) {
+                // 首帧加载中：不渲染周格，避免以错误的日期区间闪现
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 120.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(Modifier.size(28.dp))
+                }
+            } else {
+                WeekSwitcher(
+                    selectedWeek = selectedWeek,
+                    currentWeek = currentWeek,
+                    semesterStart = semesterStart,
+                    weekDates = weekDates ?: emptyList(),
+                    shifts = shifts,
+                    onPrev = { viewModel.selectWeek(selectedWeek - 1) },
+                    onNext = { viewModel.selectWeek(selectedWeek + 1) },
+                    onBackToCurrent = { viewModel.selectWeek(currentWeek) },
                 )
-                if (courses.isEmpty()) {
-                    Text(
-                        "暂无课程，点右下角 ＋ 加课",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(top = 120.dp),
+                Box(Modifier.fillMaxWidth()) {
+                    WeekGridContent(
+                        cells = cells,
+                        todayDay = highlightDay,
+                        highlightToday = isCurrentWeek && highlightDay > 0,
+                        onCellClick = { day ->
+                            // 点击列加课：星期用该列日期映射后的星期（调休日按映射）
+                            dialog = DialogState(
+                                null,
+                                WeekGrid.mappedDayForColumn(day - 1, weekDates ?: emptyList(), shifts),
+                                selectedWeek,
+                            )
+                        },
+                        onCourseClick = { c -> dialog = DialogState(c, c.dayOfWeek, selectedWeek) },
                     )
+                    if (courses.isEmpty()) {
+                        Text(
+                            stringResource(R.string.schedule_empty_hint),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(top = 120.dp),
+                        )
+                    }
                 }
             }
             // 底部留白，避免 FAB 遮挡网格底部
@@ -142,7 +208,7 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
         ExtendedFloatingActionButton(
             onClick = {
                 // 默认落到「今天所在列」映射的星期（今天放假时用自然星期）
-                val fabDay = WeekGrid.mappedDayForColumn(todayDay - 1, weekDates, shifts)
+                val fabDay = WeekGrid.mappedDayForColumn(todayDay - 1, weekDates ?: emptyList(), shifts)
                     .let { if (it in 1..7) it else todayDay }
                 dialog = DialogState(null, fabDay, selectedWeek)
             },
@@ -155,7 +221,7 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
         ) {
             Icon(Icons.Filled.Add, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text("加课")
+            Text(stringResource(R.string.schedule_add_course))
         }
     }
 
@@ -189,22 +255,27 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
         val conflicts = WeekUtils.findConflicts(courses, c)
         AlertDialog(
             onDismissRequest = { pendingAdd = null },
-            title = { Text("课程时间冲突") },
+            title = { Text(stringResource(R.string.schedule_conflict_title)) },
             text = {
                 Column {
-                    Text("「${c.name}」与以下课程时间重叠（同一天同一时段有课）：")
+                    Text(stringResource(R.string.schedule_conflict_message, c.name))
                     Spacer(Modifier.height(8.dp))
                     conflicts.forEach { other ->
                         Text(
-                            "• ${other.name}（周${DayLabels[other.dayOfWeek - 1]} " +
-                                "${other.startPeriod}-${other.endPeriod}节）",
+                            stringResource(
+                                R.string.schedule_conflict_item,
+                                other.name,
+                                weekdayName(other.dayOfWeek),
+                                other.startPeriod,
+                                other.endPeriod,
+                            ),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "确认添加后两门课会在同一格并排显示。",
+                        stringResource(R.string.schedule_conflict_note),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -214,10 +285,10 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
                 TextButton(onClick = {
                     viewModel.addCourse(c)
                     pendingAdd = null
-                }) { Text("仍然添加") }
+                }) { Text(stringResource(R.string.schedule_conflict_confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingAdd = null }) { Text("返回修改") }
+                TextButton(onClick = { pendingAdd = null }) { Text(stringResource(R.string.schedule_conflict_cancel)) }
             },
         )
     }
@@ -233,24 +304,46 @@ private data class DialogState(
 private fun WeekSwitcher(
     selectedWeek: Int,
     currentWeek: Int,
-    semesterStart: LocalDate,
+    semesterStart: LocalDate?,
     weekDates: List<LocalDate>,
     shifts: Map<LocalDate, Int>,
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onBackToCurrent: () -> Unit,
 ) {
-    val monday = semesterStart.plusWeeks((selectedWeek - 1).toLong())
-    val sunday = monday.plusDays(6)
-    val rangeText = if (monday.year == sunday.year) {
-        "${monday.monthValue}月${monday.dayOfMonth}日 – ${sunday.monthValue}月${sunday.dayOfMonth}日"
-    } else {
-        "${monday.year}年${monday.monthValue}月${monday.dayOfMonth}日 – ${sunday.year}年${sunday.monthValue}月${sunday.dayOfMonth}日"
-    }
+    // 日期区间：学期起始日未加载完成（null）时兜底不显示
+    val rangeText = semesterStart?.let { start ->
+        val monday = start.plusWeeks((selectedWeek - 1).toLong())
+        val sunday = monday.plusDays(6)
+        if (monday.year == sunday.year) {
+            stringResource(
+                R.string.schedule_week_range_same_year,
+                monday.monthValue,
+                monday.dayOfMonth,
+                sunday.monthValue,
+                sunday.dayOfMonth,
+            )
+        } else {
+            stringResource(
+                R.string.schedule_week_range_cross_year,
+                monday.year,
+                monday.monthValue,
+                monday.dayOfMonth,
+                sunday.year,
+                sunday.monthValue,
+                sunday.dayOfMonth,
+            )
+        }
+    } ?: ""
     // 本周调休提示：如「周六按周一」
     val shiftHints = weekDates.mapNotNull { d ->
         val target = shifts[d]
-        if (target != null) "${d.monthValue}月${d.dayOfMonth}日（${DayLabels[target - 1]}）按周${DayLabels[target - 1]}显示" else null
+        if (target != null) stringResource(
+            R.string.holiday_shift_line,
+            d.monthValue,
+            d.dayOfMonth,
+            weekdayName(target),
+        ) else null
     }
 
     Row(
@@ -261,22 +354,27 @@ private fun WeekSwitcher(
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                "第 $selectedWeek 周",
+                stringResource(R.string.schedule_week_title, selectedWeek),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
             )
-            Text(
-                rangeText + if (shiftHints.isEmpty()) "" else " · " + shiftHints.joinToString("、"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (rangeText.isNotEmpty()) {
+                Text(
+                    rangeText + if (shiftHints.isEmpty()) "" else " · " + shiftHints.joinToString("、"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         if (currentWeek > 0) {
             AssistChip(
                 onClick = onBackToCurrent,
                 enabled = selectedWeek != currentWeek,
                 label = {
-                    Text(if (selectedWeek == currentWeek) "本周" else "回到当前周")
+                    Text(
+                        if (selectedWeek == currentWeek) stringResource(R.string.schedule_this_week)
+                        else stringResource(R.string.schedule_back_to_current_week),
+                    )
                 },
             )
         }
@@ -294,7 +392,8 @@ private fun RoundArrowButton(onClick: () -> Unit, enabled: Boolean, isPrev: Bool
     FilledIconButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.size(36.dp),
+        // 48dp 可点击区域（Material 触控目标规范）；图标 24dp 由 FilledIconButton 默认 contentPadding 居中
+        modifier = Modifier.size(48.dp),
         colors = IconButtonDefaults.filledIconButtonColors(
             containerColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -302,7 +401,11 @@ private fun RoundArrowButton(onClick: () -> Unit, enabled: Boolean, isPrev: Bool
             disabledContentColor = MaterialTheme.colorScheme.outline,
         ),
     ) {
-        Icon(icon, contentDescription = if (isPrev) "上一周" else "下一周")
+        Icon(
+            icon,
+            contentDescription = if (isPrev) stringResource(R.string.schedule_prev_week)
+            else stringResource(R.string.schedule_next_week),
+        )
     }
 }
 
@@ -334,7 +437,7 @@ private fun WeekGridContent(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            "周${DayLabels[i]}",
+                            stringResource(R.string.schedule_day_header, weekdayName(i + 1)),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = if (highlightToday && day == todayDay) FontWeight.Bold else FontWeight.Normal,
                             color = if (highlightToday && day == todayDay) MaterialTheme.colorScheme.primary
@@ -456,7 +559,7 @@ private fun CourseCard(course: Course, modifier: Modifier) {
                 )
             }
             Text(
-                "${course.startPeriod}-${course.endPeriod}节",
+                stringResource(R.string.schedule_period_line, course.startPeriod, course.endPeriod),
                 color = Color.White.copy(alpha = 0.92f),
                 fontSize = 10.sp,
                 maxLines = 1,

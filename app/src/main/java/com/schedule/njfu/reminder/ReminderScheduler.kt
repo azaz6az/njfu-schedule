@@ -1,7 +1,6 @@
 package com.schedule.njfu.reminder
 
 import android.app.AlarmManager
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -10,78 +9,163 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.schedule.njfu.MainActivity
+import com.schedule.njfu.R
 import com.schedule.njfu.data.AppDatabase
 import com.schedule.njfu.data.SettingsKeys
 import com.schedule.njfu.data.semesterStart
 import com.schedule.njfu.model.Course
 import com.schedule.njfu.model.HolidayUtils
 import com.schedule.njfu.model.WeekUtils
+import com.schedule.njfu.util.DebugLog
+import com.schedule.njfu.widget.WidgetRefreshScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 
+/**
+ * 计算某节课程（[startTime] "HH:mm"）减去提前量 [minutesBefore] 分钟的触发 epoch（毫秒）。
+ * 用于统一提醒触发时间的计算，便于纯函数单测。
+ * @return 触发 epoch 毫秒；返回 null 表示节次时间非法（无法解析或越界）。
+ */
+internal fun computeTriggerEpoch(
+    date: LocalDate,
+    startTime: String,
+    minutesBefore: Int,
+): Long? {
+    val time = runCatching { LocalTime.parse(startTime) }.getOrNull() ?: return null
+    val trigger = date.atTime(time).minusMinutes(minutesBefore.toLong())
+    return trigger.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+}
+
 class ReminderReceiver : BroadcastReceiver() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onReceive(context: Context, intent: Intent) {
         val courseId = intent.getLongExtra("course_id", -1L)
-        val courseName = intent.getStringExtra("course_name") ?: return
-        val location = intent.getStringExtra("location") ?: ""
-        val nm = context.getSystemService(NotificationManager::class.java)
-        val channel = NotificationChannel("schedule", "课程提醒", NotificationManager.IMPORTANCE_HIGH)
-        nm.createNotificationChannel(channel)
-        val notification = NotificationCompat.Builder(context, "schedule")
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("即将上课")
-            .setContentText("$courseName $location")
-            .setAutoCancel(true)
-            .setContentIntent(PendingIntent.getActivity(context, 0,
-                Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE))
-            .build()
-        nm.notify(courseId.toInt(), notification)
+        if (courseId < 0) return
+        // goAsync 保证在库校验/重排完成前广播不被提前回收
+        val pending = goAsync()
+        scope.launch {
+            try {
+                val db = AppDatabase.get(context)
+                val today = LocalDate.now()
+                val start = db.settingsDao().semesterStart()
+                val week = WeekUtils.currentWeek(start, today)
+                val shifts = HolidayUtils.parseShifts(
+                    db.settingsDao().get(SettingsKeys.HOLIDAY_SHIFTS),
+                )
+                val effectiveDay = HolidayUtils.shiftedDayOfWeek(today, shifts)
+                val am = context.getSystemService(AlarmManager::class.java)
+
+                // 校验课程仍存在，且今天确实应上课（调休后应上该课的日子 + 当前周有课）
+                val course = db.courseDao().getAll().map { it.toModel() }
+                    .firstOrNull { it.id == courseId }
+                val shouldClass = course != null &&
+                    course.dayOfWeek == effectiveDay &&
+                    WeekUtils.contains(course.weeks, week)
+                if (!shouldClass) {
+                    // 课程已删除/日期已过/今天调休不上课：取消本次提醒，不弹通知
+                    am.cancel(fireIntent(context, courseId))
+                    return@launch
+                }
+
+                val courseName = course!!.name
+                val location = course.location
+                val nm = context.getSystemService(NotificationManager::class.java)
+                val notification = NotificationCompat.Builder(context, "schedule")
+                    .setSmallIcon(android.R.drawable.ic_dialog_info)
+                    .setContentTitle(context.getString(R.string.notification_class_soon))
+                    .setContentText("$courseName $location")
+                    .setAutoCancel(true)
+                    .setContentIntent(PendingIntent.getActivity(context, 0,
+                        Intent(context, MainActivity::class.java),
+                        PendingIntent.FLAG_IMMUTABLE))
+                    .build()
+                nm.notify((courseId and 0x7FFFFFFF).toInt(), notification)
+
+                // 自续：为明天再排一次提醒，保证连续数天不打开 App 提醒也不断
+                ReminderScheduler.rescheduleTomorrow(context)
+            } finally {
+                pending.finish()
+            }
+        }
+    }
+
+    /** 构造课程的 PendingIntent（与 [ReminderScheduler] 中 set/cancel 侧保持一致） */
+    private fun fireIntent(context: Context, courseId: Long): PendingIntent {
+        val requestCode = (courseId and 0x7FFFFFFF).toInt()
+        return PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            Intent(context, ReminderReceiver::class.java)
+                .putExtra("course_id", courseId),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 }
 
 object ReminderScheduler {
 
-    /** 为指定周的所有课程安排当天提醒；[shifts] 为调休映射（日期 → 按周几上课） */
+    /**
+     * 为指定周的课程安排某一天（默认今天）的提醒。
+     * [date] 用于计算调休映射（[shifts]）与触发时间；[week] 为 [date] 所处周次。
+     * 触发时间已过（trigger <= now）的课程被跳过，避免打开 App 时立即误报。
+     */
     fun scheduleDay(
         context: Context,
         courses: List<Course>,
         week: Int,
         minutesBefore: Int,
         shifts: Map<LocalDate, Int> = emptyMap(),
+        date: LocalDate = LocalDate.now(),
     ) {
         val am = context.getSystemService(AlarmManager::class.java)
-        val today = LocalDate.now()
         val times = loadPeriodTimes(context)
-        // 调休：今天按映射星期上课（如周六补周一的课，则提醒周一的课程）；映射为 0 表示放假无课
-        val effectiveDay = HolidayUtils.shiftedDayOfWeek(today, shifts)
+        val now = System.currentTimeMillis()
+        // 调休：这天按映射星期上课（如周六补周一的课，则提醒周一的课程）；映射为 0 表示放假无课
+        val effectiveDay = HolidayUtils.shiftedDayOfWeek(date, shifts)
         if (effectiveDay !in 1..7) return
         courses
             .filter { it.dayOfWeek == effectiveDay && WeekUtils.contains(it.weeks, week) }
             .forEach { course ->
                 val start = WeekUtils.startTimeOf(course.startPeriod, times)
                 if (start.isBlank()) return@forEach
-                val hm = start.split(":")
-                val trigger = today.atTime(hm[0].toInt(), hm[1].toInt())
-                    .minusMinutes(minutesBefore.toLong())
-                    .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                val pi = PendingIntent.getBroadcast(context, course.id.toInt(),
+                val trigger = computeTriggerEpoch(date, start, minutesBefore) ?: return@forEach
+                if (trigger <= now) return@forEach
+                val pi = PendingIntent.getBroadcast(
+                    context,
+                    (course.id and 0x7FFFFFFF).toInt(),
                     Intent(context, ReminderReceiver::class.java)
                         .putExtra("course_id", course.id)
                         .putExtra("course_name", course.name)
                         .putExtra("location", course.location),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                setExactSafely(am, trigger, pi)
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+                setExactSafely(context, am, trigger, pi)
             }
     }
 
-    /** Android 12+ 需「闹钟与提醒」授权才能精确闹钟；未授权/抛 SecurityException 时静默跳过 */
-    private fun setExactSafely(am: AlarmManager, trigger: Long, pi: PendingIntent) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) return
+    /**
+     * Android 12+ 需「闹钟与提醒」授权才能精确闹钟。
+     * 未授权时不静默跳过，降级为 [AlarmManager.setWindow]（±60s 窗口）+ 记录日志；
+     * 仍保留对 SecurityException 的兜底。
+     */
+    private fun setExactSafely(context: Context, am: AlarmManager, trigger: Long, pi: PendingIntent) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) {
+            DebugLog.write(
+                context.applicationContext,
+                "ReminderScheduler: no SCHEDULE_EXACT_ALARM, fallback to setWindow",
+            )
+            runCatching {
+                am.setWindow(AlarmManager.RTC_WAKEUP, trigger, 60_000, pi)
+            }
+            return
+        }
         runCatching { am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pi) }
     }
 
@@ -105,15 +189,38 @@ object ReminderScheduler {
         9 to "19:00", 10 to "20:00", 11 to "21:00", 12 to "22:00",
     )
 
-    /** App 启动/设置变更后调用：重排今日提醒 */
+    /**
+     * App 启动/设置变更后调用：重排今日与明日提醒。
+     * 明日用其自身日期计算周次与调休映射，保证跨日自续。
+     */
     suspend fun rescheduleToday(context: Context) {
         val db = AppDatabase.get(context)
         val start = db.settingsDao().semesterStart()
-        val week = WeekUtils.currentWeek(start, LocalDate.now())
         val minutes = db.settingsDao().get(SettingsKeys.REMIND_MINUTES)?.toIntOrNull() ?: 10
         val shifts = HolidayUtils.parseShifts(db.settingsDao().get(SettingsKeys.HOLIDAY_SHIFTS))
         val courses = db.courseDao().getAll().map { it.toModel() }
-        scheduleDay(context, courses, week, minutes, shifts)
+        val today = LocalDate.now()
+        val todayWeek = WeekUtils.currentWeek(start, today)
+        scheduleDay(context, courses, todayWeek, minutes, shifts, date = today)
+
+        val tomorrow = today.plusDays(1)
+        val tomorrowWeek = WeekUtils.currentWeek(start, tomorrow)
+        scheduleDay(context, courses, tomorrowWeek, minutes, shifts, date = tomorrow)
+    }
+
+    /**
+     * 为明天重排一次提醒（不弹通知）。供 [ReminderReceiver] 自续调用，
+     * 也用于开机/启动时把明天一并排好。
+     */
+    suspend fun rescheduleTomorrow(context: Context) {
+        val db = AppDatabase.get(context)
+        val start = db.settingsDao().semesterStart()
+        val minutes = db.settingsDao().get(SettingsKeys.REMIND_MINUTES)?.toIntOrNull() ?: 10
+        val shifts = HolidayUtils.parseShifts(db.settingsDao().get(SettingsKeys.HOLIDAY_SHIFTS))
+        val courses = db.courseDao().getAll().map { it.toModel() }
+        val tomorrow = LocalDate.now().plusDays(1)
+        val tomorrowWeek = WeekUtils.currentWeek(start, tomorrow)
+        scheduleDay(context, courses, tomorrowWeek, minutes, shifts, date = tomorrow)
     }
 }
 
@@ -128,6 +235,8 @@ class BootReceiver : BroadcastReceiver() {
             try {
                 ReminderScheduler.rescheduleToday(context)
                 ExamReminderScheduler.rescheduleExams(context)
+                // 开机重排后补全小部件刷新调度（widget 模块，非挂起、Receiver 安全）
+                WidgetRefreshScheduler.ensureScheduled(context)
             } finally {
                 pending.finish()
             }

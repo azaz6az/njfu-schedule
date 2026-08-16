@@ -4,7 +4,6 @@ import com.schedule.njfu.model.WeekUtils
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class NjfuXlsImporterTest {
 
@@ -51,9 +50,10 @@ class NjfuXlsImporterTest {
 
     @Test
     fun parsesRealExportedScheduleXls() {
-        val f = File("src/test/resources/fixtures/njfu_schedule_sample.xls")
-        assertTrue("缺少 fixture", f.exists())
-        val cs = f.inputStream().use { NjfuXlsImporter.parse(it) }
+        // 相对 CWD 的 File 路径在 Gradle 与 IDE 下不可靠，改用 classpath 资源加载（与 JwxtParserTest 一致）
+        val f = javaClass.classLoader!!.getResource("fixtures/njfu_schedule_sample.xls")
+        assertTrue("缺少 fixture", f != null)
+        val cs = f!!.openStream().use { NjfuXlsImporter.parse(it) }
         assertTrue("应解析出课程，实际 " + cs.size, cs.isNotEmpty())
 
         // 多元统计分析方法：周一 第一大节(01-02节) 1-12周 地点50613

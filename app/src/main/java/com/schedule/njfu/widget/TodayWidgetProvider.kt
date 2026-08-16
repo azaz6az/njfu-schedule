@@ -74,7 +74,12 @@ class TodayWidgetProvider : AppWidgetProvider() {
 
         views.setTextViewText(
             R.id.today_header,
-            "周${WidgetData.dayNameCn(day)} · 第${week}周 · ${courses.size}节课",
+            context.getString(
+                R.string.widget_courses_header,
+                context.getString(WidgetData.dayNameRes(day)),
+                week,
+                courses.size,
+            ),
         )
 
         courses.take(MAX_ROWS).forEach { course ->
@@ -82,7 +87,7 @@ class TodayWidgetProvider : AppWidgetProvider() {
         }
         if (courses.isEmpty()) {
             val empty = RemoteViews(context.packageName, R.layout.widget_today_item)
-            empty.setTextViewText(R.id.today_item_text, "今天无课")
+            empty.setTextViewText(R.id.today_item_text, context.getString(R.string.widget_today_empty))
             empty.setInt(R.id.today_item, "setBackgroundColor", palette.card)
             empty.setTextColor(R.id.today_item_text, palette.textSecondary)
             views.addView(R.id.today_course_container, empty)
@@ -90,11 +95,12 @@ class TodayWidgetProvider : AppWidgetProvider() {
 
         if (exam != null) {
             val (e, days) = exam
-            val countdown = if (days <= 0) "今天" else "还有 ${days} 天"
+            val countdown = if (days <= 0) context.getString(R.string.widget_countdown_today)
+            else context.getString(R.string.widget_countdown_in_days, days)
             views.setViewVisibility(R.id.exam_line, View.VISIBLE)
             views.setTextViewText(
                 R.id.exam_line,
-                "考试倒计时：${e.name} · $countdown",
+                context.getString(R.string.widget_exam_countdown_line, e.name, countdown),
             )
         } else {
             views.setViewVisibility(R.id.exam_line, View.GONE)
@@ -104,7 +110,13 @@ class TodayWidgetProvider : AppWidgetProvider() {
 
     private fun courseItem(context: Context, course: Course): RemoteViews {
         val rawColor = if (course.color == 0) CourseMapper.colorFor(course.name) else course.color
-        val text = "${course.startPeriod}-${course.endPeriod}节 ${course.name} ${course.location}".trim()
+        val text = context.getString(
+            R.string.widget_course_line,
+            course.startPeriod,
+            course.endPeriod,
+            course.name,
+            course.location,
+        ).trim()
         val item = RemoteViews(context.packageName, R.layout.widget_today_item)
         item.setTextViewText(R.id.today_item_text, text)
         item.setInt(R.id.today_item, "setBackgroundColor", CourseMapper.displayColor(rawColor))

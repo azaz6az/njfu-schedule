@@ -56,6 +56,41 @@ class WeekUtilsTest {
     }
 
     @Test
+    fun `currentWeek normalizes non-monday start to monday boundary`() {
+        // 开学日 2026-09-02 是周三：先归一化到当周周一 2026-08-31 再算周差
+        val start = java.time.LocalDate.of(2026, 9, 2)
+        // 开学当天（周三）与同周周日（9-06）都是第 1 周
+        assertEquals(1, WeekUtils.currentWeek(start, java.time.LocalDate.of(2026, 9, 2)))
+        assertEquals(1, WeekUtils.currentWeek(start, java.time.LocalDate.of(2026, 9, 6)))
+        // 归一化周一（8-31）当天也算第 1 周；其前一天返回 1（早于开学周）
+        assertEquals(1, WeekUtils.currentWeek(start, java.time.LocalDate.of(2026, 8, 31)))
+        assertEquals(1, WeekUtils.currentWeek(start, java.time.LocalDate.of(2026, 8, 30)))
+        // 下周一（9-07）起进入第 2 周
+        assertEquals(2, WeekUtils.currentWeek(start, java.time.LocalDate.of(2026, 9, 7)))
+        assertEquals(2, WeekUtils.currentWeek(start, java.time.LocalDate.of(2026, 9, 13)))
+    }
+
+    @Test
+    fun `currentWeek clamps beyond max weeks`() {
+        val start = java.time.LocalDate.of(2020, 9, 7) // 周一
+        assertEquals(1, WeekUtils.currentWeek(start, start))
+        // 第 41 周（远超 30 周学期）→ 封顶 MAX_WEEKS
+        val week = WeekUtils.currentWeek(start, start.plusWeeks(40))
+        assertEquals(WeekUtils.MAX_WEEKS, week)
+    }
+
+    @Test
+    fun `maskFor clamps ranges beyond max weeks`() {
+        // 区间 clamp：越界部分被截断，结果与 1..MAX_WEEKS 一致（Int 位掩码只有 32 位，防溢出）
+        assertEquals(WeekUtils.maskFor(1, WeekUtils.MAX_WEEKS), WeekUtils.maskFor(1, 40))
+        assertEquals(WeekUtils.maskFor(25, WeekUtils.MAX_WEEKS), WeekUtils.maskFor(25, 40))
+        // 越界单周返回 0（此前 1 shl (0-1) / 1 shl 30 会产生无意义或符号位结果）
+        assertEquals(0, WeekUtils.maskFor(0))
+        assertEquals(0, WeekUtils.maskFor(-1))
+        assertEquals(0, WeekUtils.maskFor(31))
+    }
+
+    @Test
     fun `period times expand to hourly slots`() {
         val times = listOf(1 to "08:00", 2 to "09:00", 3 to "10:00", 4 to "11:00", 5 to "14:00")
         val start = WeekUtils.startTimeOf(1, times)
@@ -115,6 +150,35 @@ class WeekUtilsTest {
     fun `parseWeeksText returns zero for unparseable text`() {
         assertEquals(0, WeekUtils.parseWeeksText(""))
         assertEquals(0, WeekUtils.parseWeeksText("随便写点什么"))
+    }
+
+    @Test
+    fun `parseWeeksText strips week chars inside text`() {
+        // 「周」在字符串中部（非行尾）的变体：应全部剔除后按段解析
+        val m = WeekUtils.parseWeeksText("1-12周,14-16周")
+        assertTrue(WeekUtils.contains(m, 12))
+        assertTrue(WeekUtils.contains(m, 14))
+        assertFalse(WeekUtils.contains(m, 13))
+        // 中间含周 + (单) 后缀：去周后仍按单周过滤
+        val odd = WeekUtils.parseWeeksText("1-16周(单)")
+        assertTrue(WeekUtils.contains(odd, 1))
+        assertTrue(WeekUtils.contains(odd, 15))
+        assertFalse(WeekUtils.contains(odd, 2))
+    }
+
+    @Test
+    fun `endTimeOf handles missing and malformed times`() {
+        // 空节次 / 无此节次 → ""
+        assertEquals("", WeekUtils.endTimeOf(1, emptyList()))
+        assertEquals("", WeekUtils.endTimeOf(2, listOf(1 to "08:00")))
+        // 空白字符串（elvis 拦不住的 ""）→ ""
+        assertEquals("", WeekUtils.endTimeOf(1, listOf(1 to "")))
+        // 坏格式 / 缺分钟 → ""（不抛 NumberFormatException）
+        assertEquals("", WeekUtils.endTimeOf(1, listOf(1 to "bad")))
+        assertEquals("", WeekUtils.endTimeOf(1, listOf(1 to "8")))
+        // 正常：第 1 节 08:00 → 结束 09:00；HH:mm 单位小时也兼容
+        assertEquals("09:00", WeekUtils.endTimeOf(1, listOf(1 to "08:00")))
+        assertEquals("22:00", WeekUtils.endTimeOf(4, listOf(4 to "21:00")))
     }
 
     @Test

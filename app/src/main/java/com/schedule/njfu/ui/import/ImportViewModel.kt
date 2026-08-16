@@ -9,6 +9,7 @@ import com.schedule.njfu.data.AppDatabase
 import com.schedule.njfu.data.ImportDiff
 import com.schedule.njfu.data.ScheduleRepository
 import com.schedule.njfu.data.SettingsKeys
+import com.schedule.njfu.R
 import com.schedule.njfu.importer.ExcelImporter
 import com.schedule.njfu.importer.IcsImporter
 import com.schedule.njfu.importer.JsonImporter
@@ -51,24 +52,27 @@ class ImportViewModel(private val db: AppDatabase, private val context: Context)
     /** 最近一次预览的考试（确认导入时随课表一起写入；为空则不动考试） */
     private var pendingExams: List<Exam> = emptyList()
 
+    /** 确认导入进行中：写库未完成前禁止再次触发，防止双击并发执行两次 replaceAll */
+    val isImporting = MutableStateFlow(false)
+
     /**
      * WebView 登录完成后回传的会话 Cookie → 抓课表页 → 预览差异。
      * 登录本身在 [CasLoginActivity] 的 WebView 内完成（教务系统拒绝非浏览器客户端）。
      */
     fun autoImportWithCookies(cookies: String) {
         if (cookies.isBlank()) {
-            state.value = UiState.Error("未获取到登录会话，请重试或改用下方手动导入");
+            state.value = UiState.Error(context.getString(R.string.import_error_no_session));
             return
         }
         viewModelScope.launch {
-            state.value = UiState.Loading("正在获取课表…")
+            state.value = UiState.Loading(context.getString(R.string.import_loading_fetching))
             val result = withContext(Dispatchers.IO) {
                 NjfuAdapter().fetchScheduleWithCookies(cookies)
             }
             result.onSuccess { courses ->
                 showPreview(courses)
             }.onFailure { e ->
-                state.value = UiState.Error("获取课表失败：${e.message}，可改用下方手动导入")
+                state.value = UiState.Error(context.getString(R.string.import_error_fetch_failed, e.message))
             }
         }
     }
@@ -79,11 +83,11 @@ class ImportViewModel(private val db: AppDatabase, private val context: Context)
      */
     fun gxuImportWithCookies(cookies: String, xnm: String, xqm: String) {
         if (cookies.isBlank()) {
-            state.value = UiState.Error("未获取到登录会话，请重试或改用下方手动导入");
+            state.value = UiState.Error(context.getString(R.string.import_error_no_session));
             return
         }
         viewModelScope.launch {
-            state.value = UiState.Loading("正在获取课表…")
+            state.value = UiState.Loading(context.getString(R.string.import_loading_fetching))
             val adapter = GxuAdapter()
             val result = withContext(Dispatchers.IO) {
                 adapter.fetchScheduleWithCookies(cookies, xnm, xqm)
@@ -98,7 +102,7 @@ class ImportViewModel(private val db: AppDatabase, private val context: Context)
                 examResult.onSuccess { exams = it }.onFailure { examFailed = true }
                 showPreview(courses, exams, examFailed)
             }.onFailure { e ->
-                state.value = UiState.Error("获取课表失败：${e.message}，可改用下方手动导入")
+                state.value = UiState.Error(context.getString(R.string.import_error_fetch_failed, e.message))
             }
         }
     }
@@ -106,10 +110,10 @@ class ImportViewModel(private val db: AppDatabase, private val context: Context)
     fun manualJson(text: String) {
         viewModelScope.launch {
             try {
-                val courses = JsonImporter.import(text)
+                val courses = withContext(Dispatchers.IO) { JsonImporter.import(text) }
                 showPreview(courses)
             } catch (e: Exception) {
-                state.value = UiState.Error("JSON 解析失败：${e.message}")
+                state.value = UiState.Error(context.getString(R.string.import_error_json, e.message))
             }
         }
     }
@@ -117,10 +121,11 @@ class ImportViewModel(private val db: AppDatabase, private val context: Context)
     fun manualIcs(text: String) {
         viewModelScope.launch {
             try {
-                val courses = IcsImporter.parse(text)
+                val start = configuredSemesterStart()
+                val courses = withContext(Dispatchers.IO) { IcsImporter.parse(text, start) }
                 showPreview(courses)
             } catch (e: Exception) {
-                state.value = UiState.Error("ICS 解析失败：${e.message}")
+                state.value = UiState.Error(context.getString(R.string.import_error_ics, e.message))
             }
         }
     }
@@ -131,14 +136,14 @@ class ImportViewModel(private val db: AppDatabase, private val context: Context)
                 val input = context.contentResolver.openInputStream(uri)
                 if (input != null) {
                     input.use {
-                        val courses = ExcelImporter.parse(it)
+                        val courses = withContext(Dispatchers.IO) { ExcelImporter.parse(it) }
                         showPreview(courses)
                     }
                 } else {
-                    state.value = UiState.Error("无法打开文件")
+                    state.value = UiState.Error(context.getString(R.string.error_cannot_open_file))
                 }
             } catch (e: Exception) {
-                state.value = UiState.Error("Excel 解析失败：${e.message}")
+                state.value = UiState.Error(context.getString(R.string.import_error_excel, e.message))
             }
         }
     }
@@ -150,52 +155,65 @@ class ImportViewModel(private val db: AppDatabase, private val context: Context)
                 val input = context.contentResolver.openInputStream(uri)
                 if (input != null) {
                     input.use {
-                        val courses = NjfuXlsImporter.parse(it)
+                        val courses = withContext(Dispatchers.IO) { NjfuXlsImporter.parse(it) }
                         if (courses.isEmpty()) {
-                            state.value = UiState.Error("未解析到课程，请确认是教务系统导出的「学生个人课表.xls」")
+                            state.value = UiState.Error(context.getString(R.string.import_error_no_courses_xls))
                         } else {
                             showPreview(courses)
                         }
                     }
                 } else {
-                    state.value = UiState.Error("无法打开文件")
+                    state.value = UiState.Error(context.getString(R.string.error_cannot_open_file))
                 }
             } catch (e: Exception) {
-                state.value = UiState.Error("课表解析失败：${e.message}")
+                state.value = UiState.Error(context.getString(R.string.import_error_schedule, e.message))
             }
         }
     }
 
-    /** 解析 → 兜底周次 → 与现有课表对比 → 进入预览，等待用户确认 */
+    /**
+     * 解析 → 兜底周次 → 与现有课表对比 → 进入预览，等待用户确认。
+     * DB 读取与 diff（CPU）在 Dispatchers.Default 执行，提交回主线程后更新状态。
+     */
     private suspend fun showPreview(
         courses: List<Course>,
         exams: List<Exam> = emptyList(),
         examFailed: Boolean = false,
     ) {
-        val (normalized, fixed) = WeekUtils.fixMissingWeeks(courses)
+        val (normalized, fixed) = withContext(Dispatchers.Default) { WeekUtils.fixMissingWeeks(courses) }
         if (normalized.isEmpty()) {
-            state.value = UiState.Error("未解析到任何课程，请检查文件内容或教务系统是否改版")
+            state.value = UiState.Error(context.getString(R.string.import_error_no_courses_any))
             return
         }
-        val existing = db.courseDao().getAll().map { it.toModel() }
-        val diff = ScheduleRepository.diff(existing, normalized)
+        val existing = withContext(Dispatchers.Default) { db.courseDao().getAll().map { it.toModel() } }
+        val diff = withContext(Dispatchers.Default) { ScheduleRepository.diff(existing, normalized) }
         pendingCourses = normalized
         pendingExams = exams
         state.value = UiState.Preview(diff, fixed, exams, examFailed)
     }
 
-    /** 用户确认导入：以预览内容整体替换课表（含考试，若有） */
+    /** 用户确认导入：以预览内容整体替换课表（含考试，若有）。防重入：进入即清空 pending，杜绝双击并发 */
     fun confirmImport() {
-        if (pendingCourses.isEmpty()) {
-            state.value = UiState.Error("没有可导入的课程，请重新导入")
+        if (isImporting.value) return
+        // 读-清原子化：先取出本次要入库的内容并清空，再 launch 写库。
+        // 即使写库未完成，后续 confirmImport 也无 pendingCourses 可用，天然防双击重入。
+        val courses = pendingCourses
+        val exams = pendingExams
+        pendingCourses = emptyList()
+        pendingExams = emptyList()
+        if (courses.isEmpty()) {
+            state.value = UiState.Error(context.getString(R.string.import_error_nothing_to_import))
             return
         }
+        isImporting.value = true
         viewModelScope.launch {
-            val (normalized, fixed) = WeekUtils.fixMissingWeeks(pendingCourses)
-            repo.replaceAll(normalized, pendingExams)
-            pendingCourses = emptyList()
-            pendingExams = emptyList()
-            state.value = UiState.Done(normalized.size, fixed)
+            try {
+                val (normalized, fixed) = withContext(Dispatchers.Default) { WeekUtils.fixMissingWeeks(courses) }
+                withContext(Dispatchers.Default) { repo.replaceAll(normalized, exams) }
+                state.value = UiState.Done(normalized.size, fixed)
+            } finally {
+                isImporting.value = false
+            }
         }
     }
 

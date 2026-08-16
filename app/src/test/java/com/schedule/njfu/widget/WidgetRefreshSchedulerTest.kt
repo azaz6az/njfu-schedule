@@ -82,4 +82,43 @@ class WidgetRefreshSchedulerTest {
         )
         assertEquals(at(1, 9, 31), next)
     }
+
+    @Test
+    fun `window exit point - now equals end plus 60 min leaves window`() {
+        // 第 1 节 08:00 上 45 分钟 → 08:45 下课，窗口右边界 = 09:45。
+        // now == 09:44（边界前）仍在窗口 → 逐分钟档（短触发，触发 setWindow 分支）。
+        val inside = WidgetRefreshScheduler.nextRefreshAt(
+            listOf(mondayCourse(1)), 1, at(1, 9, 44), emptyMap(),
+        )
+        assertEquals(at(1, 9, 45), inside)
+
+        // now == 09:45（end + 60min，精确退出点）已离开窗口，
+        // 且「课前 60 分钟」档（07:00）早过 → 回落次日 08:00 常规档位（触发 setExact 分支）。
+        val outside = WidgetRefreshScheduler.nextRefreshAt(
+            listOf(mondayCourse(1)), 1, at(1, 9, 45), emptyMap(),
+        )
+        assertEquals(at(2, 8, 0), outside)
+    }
+
+    @Test
+    fun `two classes spaced over 2h picks next class start minus 60 min`() {
+        // 第 1 节 08:00、第 4 节 11:00，两门跨越 3 小时（>2h）。
+        // now = 09:50 落在两门课的倒计时窗口间隙（既不覆盖课 1 到 09:45，也早于课 4 的 10:00），
+        // 因此选中「下一次上课（第 4 节）开始前 60 分钟」= 10:00 常规档位。
+        val next = WidgetRefreshScheduler.nextRefreshAt(
+            listOf(mondayCourse(1), mondayCourse(4)), 1, at(1, 9, 50),
+            mapOf(1 to "08:00", 4 to "11:00"),
+        )
+        assertEquals(at(1, 10, 0), next)
+    }
+
+    @Test
+    fun `no courses - no per-minute spam, falls to next day 08 00`() {
+        // 空课程表（等价于无任何可刷新实例）：不进入逐分钟档，
+        // 直接落到次日 08:00 常规档位，避免每 5 分钟空转闹钟。
+        val next = WidgetRefreshScheduler.nextRefreshAt(
+            emptyList(), 1, at(1, 9, 50), emptyMap(),
+        )
+        assertEquals(at(2, 8, 0), next)
+    }
 }

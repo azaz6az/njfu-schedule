@@ -1,5 +1,6 @@
 package com.schedule.njfu.widget
 
+import com.schedule.njfu.R
 import com.schedule.njfu.model.Course
 import com.schedule.njfu.model.Exam
 import com.schedule.njfu.model.WeekUtils
@@ -53,7 +54,8 @@ object WidgetData {
         val phase: NextClassPhase,
         val course: Course?,
         val minutes: Int,
-        val today: String,
+        /** 星期中文名的字符串资源 id（1=一 .. 7=日），渲染时经 context.getString 取串 */
+        val todayRes: Int,
         val week: Int,
     )
 
@@ -120,13 +122,13 @@ object WidgetData {
         periodTimes: Map<Int, String>,
     ): NextClassState {
         val day = now.dayOfWeek.value
-        val today = dayNameCn(day)
+        val todayRes = dayNameRes(day)
         val tables = periodTimeMap(periodTimes)
         val dayCourses = courses
             .filter { it.dayOfWeek == day && (WeekUtils.contains(it.weeks, week) || it.weeks == 0) }
             .sortedBy { it.startPeriod }
         if (dayCourses.isEmpty()) {
-            return NextClassState(NextClassPhase.NO_CLASS_TODAY, null, 0, today, week)
+            return NextClassState(NextClassPhase.NO_CLASS_TODAY, null, 0, todayRes, week)
         }
 
         val nowTime = now.toLocalTime()
@@ -144,7 +146,7 @@ object WidgetData {
         }?.let { active ->
             val (_, end) = spanOf(active)!!
             val minutes = ChronoUnit.MINUTES.between(nowTime, end).toInt().coerceAtLeast(0)
-            return NextClassState(NextClassPhase.IN_PROGRESS, active, minutes, today, week)
+            return NextClassState(NextClassPhase.IN_PROGRESS, active, minutes, todayRes, week)
         }
 
         // 上课前：找最早 start>now 的课
@@ -154,11 +156,11 @@ object WidgetData {
         }?.let { upcoming ->
             val (s, _) = spanOf(upcoming)!!
             val minutes = ChronoUnit.MINUTES.between(nowTime, s).toInt()
-            return NextClassState(NextClassPhase.BEFORE, upcoming, minutes, today, week)
+            return NextClassState(NextClassPhase.BEFORE, upcoming, minutes, todayRes, week)
         }
 
         // 无 future 课且无 in-progress → 今天已上完
-        return NextClassState(NextClassPhase.AFTER, null, 0, today, week)
+        return NextClassState(NextClassPhase.AFTER, null, 0, todayRes, week)
     }
 
     /**
@@ -176,9 +178,18 @@ object WidgetData {
         return upcoming.second to days
     }
 
-    /** 星期几中文名：1=一 .. 7=日 */
-    fun dayNameCn(dayOfWeek: Int): String = when (dayOfWeek) {
-        1 -> "一"; 2 -> "二"; 3 -> "三"; 4 -> "四"; 5 -> "五"; 6 -> "六"; 7 -> "日"
-        else -> ""
+    /**
+     * 星期几中文名的字符串资源 id：1=一 .. 7=日；越界返回 0（无资源）。
+     * 渲染（RemoteViews / Compose）时经 context.getString / stringResource 取串。
+     */
+    fun dayNameRes(dayOfWeek: Int): Int = when (dayOfWeek) {
+        1 -> R.string.weekday_mon
+        2 -> R.string.weekday_tue
+        3 -> R.string.weekday_wed
+        4 -> R.string.weekday_thu
+        5 -> R.string.weekday_fri
+        6 -> R.string.weekday_sat
+        7 -> R.string.weekday_sun
+        else -> 0
     }
 }

@@ -1,5 +1,6 @@
 package com.schedule.njfu.model
 
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.time.LocalDate
 
@@ -31,11 +32,13 @@ object HolidayUtils {
         }.toMap()
     }
 
-    /** 序列化为 JSON，供设置保存（按日期排序，输出稳定）；格式 {"2025-10-11":1,"2025-10-08":0} */
+    /**
+     * 序列化为 JSON，供设置保存（按日期排序，输出稳定）；格式 {"2025-10-11":1,"2025-10-08":0}。
+     * 复用与 [parseShifts] 相同的 kotlinx.serialization json 实例，保证编解码对称；
+     * 键仍是 LocalDate.toString() 的 ISO 日期字符串（"2025-10-11"）。
+     */
     fun serializeShifts(shifts: Map<LocalDate, Int>): String =
-        shifts.toSortedMap().entries.joinToString(",", "{", "}") { (date, day) ->
-            "\"$date\":$day"
-        }
+        json.encodeToString(shifts.toSortedMap().mapKeys { (date, _) -> date.toString() })
 
     /** 某日期实际应显示的星期（1=周一..7=周日）；0 = 放假无课；无映射返回自然星期 */
     fun shiftedDayOfWeek(date: LocalDate, shifts: Map<LocalDate, Int>): Int =

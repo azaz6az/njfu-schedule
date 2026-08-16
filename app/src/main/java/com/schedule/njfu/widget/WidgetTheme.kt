@@ -105,12 +105,12 @@ object WidgetTheme {
     /** 所有主题键 */
     fun allKeys(): Set<String> = palettes.keys
 
-    /** 主题键 -> 中文名（供设置页展示） */
-    fun themeLabel(themeKey: String): String = when (themeKey) {
-        KEY_MORANDI -> "莫兰迪纸感"
-        KEY_FRESH -> "清新浅色"
-        KEY_DEEP -> "深邃夜间"
-        else -> themeLabel(DEFAULT_KEY)
+    /** 主题键 -> 中文名资源 id（供设置页展示）；未知键回退默认主题 */
+    fun themeLabelRes(themeKey: String): Int = when (themeKey) {
+        KEY_MORANDI -> R.string.widget_theme_morandi
+        KEY_FRESH -> R.string.widget_theme_fresh
+        KEY_DEEP -> R.string.widget_theme_deep
+        else -> themeLabelRes(DEFAULT_KEY)
     }
 
     /**

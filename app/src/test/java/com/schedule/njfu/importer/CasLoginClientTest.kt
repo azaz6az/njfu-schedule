@@ -1,6 +1,7 @@
 package com.schedule.njfu.importer
 
 import com.schedule.njfu.importer.njfu.CasLoginClient
+import com.schedule.njfu.importer.njfu.CaptchaRequiredException
 import com.schedule.njfu.importer.njfu.LoginPage
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -148,6 +149,65 @@ class CasLoginClientTest {
             username = "2023001", password = "bad")
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull()?.message?.contains("认证服务") == true)
+        server.shutdown()
+    }
+
+    @Test
+    fun `needCaptcha true throws CaptchaRequiredException`() {
+        val server = MockWebServer()
+        server.start()
+        server.enqueue(MockResponse().setResponseCode(200).setBody(loginHtml))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("true"))   // needCaptcha=true
+        val result = CasLoginClient.login(
+            baseUrl = server.url("/authserver/login").toString().removeSuffix("/"),
+            username = "2023001", password = "secret123")
+        assertTrue(result.isFailure)
+        assertTrue("应抛出验证码必需异常",
+            result.exceptionOrNull() is CaptchaRequiredException)
+        val page = (result.exceptionOrNull() as CaptchaRequiredException).page
+        assertEquals("LT-123-test", page.lt)
+        server.shutdown()
+    }
+
+    @Test
+    fun `loginWithCaptcha carries captchaResponse field`() {
+        val server = MockWebServer()
+        server.start()
+        // loginWithCaptcha 直接提交表单（不查 needCaptcha）→ 302 成功
+        server.enqueue(MockResponse().setResponseCode(302)
+            .addHeader("Location", server.url("/sso.jsp?ticket=ST-captcha").toString()))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("<html>已登录</html>"))
+        val page = LoginPage(
+            lt = "LT-123-test", execution = "e1s1",
+            salt = "testSalt12345678", action = "", needsSlider = false)
+        val result = CasLoginClient.loginWithCaptcha(
+            baseUrl = server.url("/authserver/login").toString().removeSuffix("/"),
+            username = "2023001", password = "secret123",
+            captcha = "abcd", page = page)
+        assertTrue(result.isSuccess)
+        val posted = server.takeRequest()!!   // 1) 表单提交
+        val body = posted.body.readUtf8()
+        assertTrue("验证码应作为 captchaResponse 提交", body.contains("captchaResponse=abcd"))
+        assertTrue(body.contains("username=2023001"))
+        server.shutdown()
+    }
+
+    @Test
+    fun `existing TGC cookie leads to fast 302 success path`() {
+        val server = MockWebServer()
+        server.start()
+        // 登录页请求即返回 302 带 ticket（CookieJar 已有 TGC），无需表单提交
+        server.enqueue(MockResponse().setResponseCode(302)
+            .addHeader("Location", server.url("/sso.jsp?ticket=ST-existing").toString()))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("<html>已登录</html>"))
+        val result = CasLoginClient.login(
+            baseUrl = server.url("/authserver/login").toString().removeSuffix("/"),
+            username = "2023001", password = "secret123")
+        assertTrue(result.isSuccess)
+        // 只消费了登录页 GET 与 sso 落地，未发起表单提交 / needCaptcha
+        server.takeRequest()   // 1) 登录页 GET → 302
+        val sso = server.takeRequest()!!   // 2) 跟随 service
+        assertEquals("/sso.jsp?ticket=ST-existing", sso.path)
         server.shutdown()
     }
 }

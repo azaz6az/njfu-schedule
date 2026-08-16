@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  API 31+ (Android 12+) 备份/设备迁移规则。
+  - cloud-backup：排除本地课表数据库 schedule.db（避免云端旧快照回写损坏迁移）与登录凭据 credentials；其他设置可备份。
+  - device-transfer：仅排除登录凭据（凭据经 Keystore 加密，无法跨设备解密），允许 schedule.db 随设备迁移以保留课表。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude
+            domain="database"
+            path="schedule.db" />
+        <exclude
+            domain="sharedpref"
+            path="credentials.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude
+            domain="sharedpref"
+            path="credentials.xml" />
+    </device-transfer>
+</data-extraction-rules>

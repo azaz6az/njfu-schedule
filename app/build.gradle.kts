@@ -14,12 +14,13 @@ android {
         applicationId = "com.schedule.njfu"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.5.0"
+        versionCode = 9
+        versionName = "0.5.1"
     }
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -41,6 +42,10 @@ android {
     }
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.core.ktx)
@@ -59,9 +64,8 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.fastexcel.reader)
-    // 教务系统导出为老式 .xls（BIFF），用 POI 的 HSSF 读取（排除会与 Android 运行时冲突的日志实现，保留 log4j-api）
+    // 教务系统导出为老式 .xls（BIFF），用 POI 的 HSSF 读取（POI 5.x 传递依赖 log4j-api，故不显式声明）
     implementation(libs.poi)
-    implementation(libs.log4j.api)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockwebserver)

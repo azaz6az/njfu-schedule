@@ -28,9 +28,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.schedule.njfu.R
 import com.schedule.njfu.model.Exam
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -50,14 +52,14 @@ fun ExamScreen(viewModel: ExamViewModel, onAdd: () -> Unit) {
             .filter { it >= 0 }
             .minOrNull()
         val subtitle = when {
-            exams.isEmpty() -> "暂无考试安排"
-            nextDays == null -> "共 ${exams.size} 门"
-            nextDays == 0L -> "共 ${exams.size} 门 · 最近一场就在今天"
-            else -> "共 ${exams.size} 门 · 最近一场 $nextDays 天后"
+            exams.isEmpty() -> stringResource(R.string.exam_empty)
+            nextDays == null -> stringResource(R.string.exam_count, exams.size)
+            nextDays == 0L -> stringResource(R.string.exam_count_today, exams.size)
+            else -> stringResource(R.string.exam_count_days, exams.size, nextDays)
         }
         Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)) {
             Text(
-                "考试安排",
+                stringResource(R.string.exam_title),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
             )
@@ -76,7 +78,7 @@ fun ExamScreen(viewModel: ExamViewModel, onAdd: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    "暂无考试安排",
+                    stringResource(R.string.exam_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -98,7 +100,7 @@ fun ExamScreen(viewModel: ExamViewModel, onAdd: () -> Unit) {
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             shape = RoundedCornerShape(50),
         ) {
-            Text("＋ 添加考试")
+            Text(stringResource(R.string.exam_add))
         }
     }
 
@@ -114,15 +116,15 @@ fun ExamScreen(viewModel: ExamViewModel, onAdd: () -> Unit) {
     deleteTarget?.let { exam ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("删除考试") },
-            text = { Text("确定删除「${exam.name}」的考试安排？") },
+            title = { Text(stringResource(R.string.exam_delete_title)) },
+            text = { Text(stringResource(R.string.exam_delete_message, exam.name)) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteExam(exam.id)
                     deleteTarget = null
-                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+                }) { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("取消") } },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text(stringResource(R.string.action_cancel)) } },
         )
     }
 }
@@ -186,26 +188,26 @@ private fun ExamDialog(onSave: (Exam) -> Unit, onDismiss: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("添加考试") },
+        title = { Text(stringResource(R.string.exam_add_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("考试名称") },
+                    label = { Text(stringResource(R.string.exam_name_label)) },
                     singleLine = true,
                 )
                 OutlinedTextField(
                     value = date,
                     onValueChange = { date = it },
-                    label = { Text("日期（yyyy-MM-dd）") },
+                    label = { Text(stringResource(R.string.input_date_label)) },
                     singleLine = true,
                     isError = date.isNotBlank() && !dateValid,
                 )
                 OutlinedTextField(
                     value = location,
                     onValueChange = { location = it },
-                    label = { Text("地点") },
+                    label = { Text(stringResource(R.string.course_location_label)) },
                     singleLine = true,
                 )
             }
@@ -216,10 +218,10 @@ private fun ExamDialog(onSave: (Exam) -> Unit, onDismiss: () -> Unit) {
                     onSave(Exam(name = name.trim(), date = date.trim(), location = location.trim()))
                 },
                 enabled = name.isNotBlank() && dateValid,
-            ) { Text("保存") }
+            ) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         },
     )
 }

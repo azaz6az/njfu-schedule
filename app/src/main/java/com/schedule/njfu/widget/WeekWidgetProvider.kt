@@ -89,7 +89,12 @@ class WeekWidgetProvider : AppWidgetProvider() {
 
     private fun courseItem(context: Context, course: Course): RemoteViews {
         val rawColor = if (course.color == 0) CourseMapper.colorFor(course.name) else course.color
-        val text = "${course.startPeriod}-${course.endPeriod}节 ${course.name}".trim()
+        val text = context.getString(
+            R.string.widget_week_course_line,
+            course.startPeriod,
+            course.endPeriod,
+            course.name,
+        ).trim()
         val item = RemoteViews(context.packageName, R.layout.widget_week_item)
         item.setTextViewText(R.id.week_course_text, text)
         item.setInt(R.id.week_item, "setBackgroundColor", CourseMapper.displayColor(rawColor))

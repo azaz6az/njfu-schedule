@@ -22,13 +22,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.schedule.njfu.R
 import com.schedule.njfu.data.CourseMapper
 import com.schedule.njfu.model.Course
 import com.schedule.njfu.model.WeekUtils
-
-private val DayLabels = listOf("一", "二", "三", "四", "五", "六", "日")
+import com.schedule.njfu.ui.weekdayName
 
 /**
  * 课程详情/编辑（course != null）与加课（course == null）对话框。
@@ -54,6 +60,7 @@ fun CourseDialog(
     }
     var dayExpanded by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
 
     fun save() {
         val n = name.trim()
@@ -61,11 +68,13 @@ fun CourseDialog(
         val e = endPeriod.trim().toIntOrNull()
         val mask = parseWeeksInput(weeksText)
         when {
-            n.isEmpty() -> error = "请输入课程名称"
-            day !in 1..7 -> error = "星期需为 1-7"
-            s == null || s !in 1..WeekGrid.MAX_PERIODS -> error = "开始节需为 1-${WeekGrid.MAX_PERIODS}"
-            e == null || e < s || e > WeekGrid.MAX_PERIODS -> error = "结束节需在 ${s}..${WeekGrid.MAX_PERIODS} 之间"
-            mask == 0 -> error = "周次格式无效，如 1-16 / 单周 / 1-16(单)"
+            n.isEmpty() -> error = context.getString(R.string.course_error_name_empty)
+            day !in 1..7 -> error = context.getString(R.string.course_error_day)
+            s == null || s !in 1..WeekGrid.MAX_PERIODS ->
+                error = context.getString(R.string.course_error_start_period, WeekGrid.MAX_PERIODS)
+            e == null || e < s || e > WeekGrid.MAX_PERIODS ->
+                error = context.getString(R.string.course_error_end_period, s, WeekGrid.MAX_PERIODS)
+            mask == 0 -> error = context.getString(R.string.course_error_weeks)
             else -> onSave(
                 Course(
                     id = course?.id ?: 0,
@@ -86,7 +95,7 @@ fun CourseDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (course == null) "添加课程" else "课程详情") },
+        title = { Text(if (course == null) stringResource(R.string.course_add_title) else stringResource(R.string.course_detail_title)) },
         text = {
             Column(
                 modifier = Modifier
@@ -96,35 +105,40 @@ fun CourseDialog(
             ) {
                 OutlinedTextField(
                     value = name, onValueChange = { name = it },
-                    label = { Text("课程名称") }, singleLine = true,
+                    label = { Text(stringResource(R.string.course_name_label)) }, singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = teacher, onValueChange = { teacher = it },
-                    label = { Text("教师") }, singleLine = true,
+                    label = { Text(stringResource(R.string.course_teacher_label)) }, singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = location, onValueChange = { location = it },
-                    label = { Text("地点") }, singleLine = true,
+                    label = { Text(stringResource(R.string.course_location_label)) }, singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 // 星期选择
                 Column(Modifier.fillMaxWidth()) {
                     OutlinedTextField(
-                        value = "周${DayLabels.getOrNull(day - 1) ?: ""}",
+                        value = stringResource(R.string.weekday_with_prefix, weekdayName(day)),
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("星期") },
+                        label = { Text(stringResource(R.string.course_day_label)) },
                         trailingIcon = { Text("▼") },
+                        // clickable 直接作用于输入框（readOnly 会消费点击，放在父容器上会失效）
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { dayExpanded = true },
+                            .clickable { dayExpanded = true }
+                            .semantics {
+                                role = Role.DropdownList
+                                contentDescription = context.getString(R.string.course_day_select)
+                            },
                     )
                     DropdownMenu(expanded = dayExpanded, onDismissRequest = { dayExpanded = false }) {
                         (1..7).forEach { d ->
                             DropdownMenuItem(
-                                text = { Text("周${DayLabels[d - 1]}") },
+                                text = { Text(stringResource(R.string.weekday_with_prefix, weekdayName(d))) },
                                 onClick = { day = d; dayExpanded = false },
                             )
                         }
@@ -133,21 +147,21 @@ fun CourseDialog(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = startPeriod, onValueChange = { startPeriod = it },
-                        label = { Text("开始节") }, singleLine = true,
+                        label = { Text(stringResource(R.string.course_start_period_label)) }, singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f),
                     )
                     OutlinedTextField(
                         value = endPeriod, onValueChange = { endPeriod = it },
-                        label = { Text("结束节") }, singleLine = true,
+                        label = { Text(stringResource(R.string.course_end_period_label)) }, singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(1f),
                     )
                 }
                 OutlinedTextField(
                     value = weeksText, onValueChange = { weeksText = it },
-                    label = { Text("周次") },
-                    supportingText = { Text("如 1-16、单周、1,3,5、1-16(单)") },
+                    label = { Text(stringResource(R.string.course_weeks_label)) },
+                    supportingText = { Text(stringResource(R.string.course_weeks_hint)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -158,7 +172,7 @@ fun CourseDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { save() }) { Text("保存") }
+            TextButton(onClick = { save() }) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {
             Row {
@@ -166,9 +180,9 @@ fun CourseDialog(
                     TextButton(onClick = {
                         onDelete(course.id)
                         onDismiss()
-                    }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+                    }) { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) }
                 }
-                TextButton(onClick = onDismiss) { Text("取消") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
             }
         },
     )
