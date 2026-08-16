@@ -28,6 +28,7 @@ class CasLoginActivity : ComponentActivity() {
         const val EXTRA_START_URL = "extra_start_url"
         const val EXTRA_SUCCESS_HOST_PREFIXES = "extra_success_host_prefixes"
         const val EXTRA_SUCCESS_COOKIE_MARKER = "extra_success_cookie_marker"
+        const val EXTRA_SUCCESS_URL_BLACKLIST = "extra_success_url_blacklist"
     }
 
     private var done = false
@@ -41,6 +42,8 @@ class CasLoginActivity : ComponentActivity() {
             ?.takeIf { it.isNotEmpty() } ?: School.NJFU.successHostPrefixes
         val cookieMarker = intent.getStringExtra(EXTRA_SUCCESS_COOKIE_MARKER)
             ?.takeIf { it.isNotEmpty() } ?: School.NJFU.successCookieMarker
+        val urlBlacklist = intent.getStringArrayListExtra(EXTRA_SUCCESS_URL_BLACKLIST)
+            ?.takeIf { it.isNotEmpty() } ?: School.NJFU.successUrlBlacklist
 
         val webView = WebView(this)
         webView.layoutParams = ViewGroup.LayoutParams(
@@ -60,6 +63,9 @@ class CasLoginActivity : ComponentActivity() {
                 // 成功判定：URL 落在目标站点前缀下 && Cookie 含该站点登录成功的会话标记
                 val onTarget = hostPrefixes.any { url.startsWith(it) }
                 if (!onTarget) return
+                // 黑名单片段（如正方登录页 login_slogin）：即使 Cookie 已下发会话，
+                // 只要还停在登录页上就不算登录成功，避免「秒退」
+                if (urlBlacklist.any { url.contains(it) }) return
                 val cookies = CookieManager.getInstance().getCookie(url) ?: return
                 if (!cookies.contains(cookieMarker)) return
                 done = true

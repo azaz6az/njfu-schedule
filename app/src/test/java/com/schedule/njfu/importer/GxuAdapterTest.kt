@@ -47,6 +47,11 @@ class GxuAdapterTest {
         assertTrue(form.contains("xqm=3"))
         // Cookie 头
         assertEquals("JSESSIONID=abc123", request.getHeader("Cookie"))
+        // Referer 头（正方 jwglxt 校验 AJAX Referer）
+        assertTrue(
+            "应携带课表页 Referer",
+            request.getHeader("Referer")?.contains("xskbcx_cxXskbcxIndex.html") == true,
+        )
 
         val courses = result.getOrThrow()
         assertEquals(1, courses.size)

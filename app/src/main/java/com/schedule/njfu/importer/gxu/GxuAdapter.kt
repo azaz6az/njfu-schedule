@@ -53,6 +53,7 @@ class GxuAdapter(
                     cookieHeader = cookieHeader,
                     xnm = xnm,
                     xqm = xqm,
+                    referer = "$baseUrl/jwglxt/kbcx/xskbcx_cxXskbcxIndex.html?gnmkdm=N2151&layout=default",
                 )
                 GxuParser.parseScheduleJson(body)
             }
@@ -69,19 +70,28 @@ class GxuAdapter(
                     cookieHeader = cookieHeader,
                     xnm = xnm,
                     xqm = xqm,
+                    referer = "$baseUrl/jwglxt/kscx_cxXsksxxIndex.html?gnmkdm=N358105&layout=default",
                 )
                 GxuParser.parseExamsJson(body)
             }
         }
 
-    /** POST xnm/xqm 表单，携带浏览器 UA 与会话 Cookie；响应非 JSON 或含登录跳转视为会话失效 */
-    private fun postForm(url: String, cookieHeader: String?, xnm: String, xqm: String): String {
+    /** POST xnm/xqm 表单，携带浏览器 UA/Referer/会话 Cookie；响应非 JSON 或含登录跳转视为会话失效 */
+    private fun postForm(
+        url: String,
+        cookieHeader: String?,
+        xnm: String,
+        xqm: String,
+        referer: String,
+    ): String {
         val form = FormBody.Builder().add("xnm", xnm).add("xqm", xqm).build()
         val builder = Request.Builder()
             .url(url)
             .header("User-Agent", CasLoginClient.BROWSER_UA)
             .header("Accept", "application/json, text/javascript, */*; q=0.01")
             .header("X-Requested-With", "XMLHttpRequest")
+            // 正方 jwglxt 的 AJAX 接口校验 Referer，缺失会返回登录页/空数据
+            .header("Referer", referer)
             .post(form)
         if (!cookieHeader.isNullOrBlank()) builder.header("Cookie", cookieHeader)
         val response = http.newCall(builder.build()).execute()

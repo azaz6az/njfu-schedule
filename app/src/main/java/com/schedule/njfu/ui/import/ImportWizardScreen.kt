@@ -220,6 +220,10 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
                             CasLoginActivity.EXTRA_SUCCESS_COOKIE_MARKER,
                             selectedSchool.successCookieMarker,
                         )
+                        intent.putStringArrayListExtra(
+                            CasLoginActivity.EXTRA_SUCCESS_URL_BLACKLIST,
+                            ArrayList(selectedSchool.successUrlBlacklist),
+                        )
                         casLauncher.launch(intent)
                     },
                     enabled = !loading && (selectedSchool != School.GXU || (xnm.isNotEmpty() && xqm.isNotEmpty())),
