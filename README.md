@@ -81,6 +81,8 @@ Android 课程表 App：自动导入南林 / 广西大学教务课表 + 手动�
 
 APK 输出：`app/build/outputs/apk/debug/app-debug.apk`，直接安装到手机即可（需允许未知来源）。
 
+Release 签名：本地存在 `key.properties`（gitignored，内容为 `keystore/release.jks` 的路径与口令）时，`assembleRelease` 自动签名并产出 `app/build/outputs/apk/release/app-release.apk`；无密钥环境（如 CI）产出 unsigned 包。密钥文件请妥善备份（换机/重装后丢失将无法升级覆盖安装）。
+
 ## 使用
 
 1. 打开 App →「导入」Tab → 输入学号密码 → 开始导入

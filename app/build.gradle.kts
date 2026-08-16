@@ -6,6 +6,8 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+import java.util.Properties
+
 android {
     namespace = "com.schedule.njfu"
     compileSdk = 35
@@ -17,11 +19,26 @@ android {
         versionCode = 9
         versionName = "0.5.1"
     }
+    // 先从 key.properties（gitignored）读取签名配置；文件存在才创建 release 签名
+    signingConfigs {
+        val propsFile = rootProject.file("key.properties")
+        if (propsFile.exists()) {
+            val props = Properties().apply { load(propsFile.inputStream()) }
+            create("release") {
+                storeFile = file(props.getProperty("storeFile")!!)
+                storePassword = props.getProperty("storePassword")!!
+                keyAlias = props.getProperty("keyAlias")!!
+                keyPassword = props.getProperty("keyPassword")!!
+            }
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // 有 release 签名配置时自动签名；缺失（如 CI 无密钥）时保持 unsigned
+            signingConfig = signingConfigs.findByName("release")
         }
     }
     compileOptions {

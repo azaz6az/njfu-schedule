@@ -10,3 +10,5 @@ local.properties
 
 .superpowers/
 test_schedule.xlsx
+keystore/
+/key.properties
