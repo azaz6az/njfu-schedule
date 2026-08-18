@@ -12,6 +12,8 @@ object SettingsKeys {
     const val EXAM_REMIND_DAYS = "exam_remind_days"    // "1"|"2"|"3"|"7"，默认 "1"
     const val HOLIDAY_SHIFTS = "holiday_shifts"        // JSON: {"2025-10-11":1,...} 调休日按周几显示
     const val WIDGET_THEME = "widget_theme"            // "morandi"|"fresh"|"deep"，默认 morandi
+    const val ROW_HEIGHT = "row_height"                // "48"|"56"|"64" 课表每节高度(dp)，默认 48
+    const val DEFAULT_ROW_HEIGHT = 48
 }
 
 /** 小组件主题键，默认 morandi */

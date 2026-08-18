@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 学期周次热力图（Agent B 专属资源文件）：新文案只能加在本文件，命名必须以 heatmap_ 开头且全局唯一；
+         禁止修改 strings.xml 或任何其他 strings_*.xml -->
+    <!-- 底部导航第 5 个页签：周次热力图 -->
+    <string name="heatmap_tab">周次</string>
+    <!-- 热力图页标题 -->
+    <string name="heatmap_title">学期课程分布总览</string>
+    <!-- 空状态：暂无课程 -->
+    <string name="heatmap_empty">暂无课程</string>
+    <!-- 周次跨度小结：整学期 -->
+    <string name="heatmap_span_full">全学期</string>
+    <!-- 周次跨度小结：连续区间 / 单周 -->
+    <string name="heatmap_week_range">%1$d-%2$d周</string>
+    <string name="heatmap_week_single">%1$d周</string>
+    <!-- 展开详情：星期+节次 / 地点 / 教师 / 周次 -->
+    <string name="heatmap_detail_schedule">周%1$s %2$d-%3$d节</string>
+    <string name="heatmap_detail_location">地点：%1$s</string>
+    <string name="heatmap_detail_teacher">教师：%1$s</string>
+    <string name="heatmap_detail_weeks">周次：%1$s</string>
+</resources>

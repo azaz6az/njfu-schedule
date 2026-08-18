@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -32,6 +33,8 @@ import com.schedule.njfu.ui.schedule.ExamScreen
 import com.schedule.njfu.ui.schedule.ExamViewModel
 import com.schedule.njfu.ui.schedule.ScheduleScreen
 import com.schedule.njfu.ui.schedule.ScheduleViewModel
+import com.schedule.njfu.ui.schedule.WeekHeatmapScreen
+import com.schedule.njfu.ui.schedule.WeekHeatmapViewModel
 import com.schedule.njfu.ui.settings.SettingsScreen
 import com.schedule.njfu.ui.settings.SettingsViewModel
 
@@ -40,6 +43,7 @@ object Routes {
     const val EXAMS = "exams"
     const val SETTINGS = "settings"
     const val IMPORT = "import"
+    const val HEATMAP = "heatmap"
 }
 
 private data class Tab(val route: String, val labelRes: Int, val icon: ImageVector)
@@ -56,6 +60,8 @@ fun AppNav(db: AppDatabase, initialTab: String? = null) {
         Tab(Routes.EXAMS, R.string.nav_exams, Icons.Filled.DateRange),
         Tab(Routes.SETTINGS, R.string.nav_settings, Icons.Filled.Settings),
         Tab(Routes.IMPORT, R.string.nav_import, Icons.Filled.Add),
+        // 第 5 个页签：周次热力图（学期课程分布总览）
+        Tab(Routes.HEATMAP, R.string.heatmap_tab, Icons.Filled.Home),
     )
     Scaffold(
         bottomBar = {
@@ -109,6 +115,10 @@ fun AppNav(db: AppDatabase, initialTab: String? = null) {
                         }
                     },
                 )
+            }
+            composable(Routes.HEATMAP) {
+                val vm: WeekHeatmapViewModel = viewModel(factory = WeekHeatmapViewModel.Factory(db))
+                WeekHeatmapScreen(vm)
             }
         }
     }

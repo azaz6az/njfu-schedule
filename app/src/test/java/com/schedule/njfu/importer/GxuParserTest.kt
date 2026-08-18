@@ -200,6 +200,57 @@ class GxuParserTest {
         assertEquals("10:00", exams[0].note)
     }
 
+    @Test
+    fun `parses gxu v9 real shape with cdmc location and paren time`() {
+        // 广西大学 V9 实测字段形状（2026-08）：地点在 cdmc，考试时间为 yyyy-MM-dd(HH:mm-HH:mm)
+        val json = """
+            {"kbList":[
+              {
+                "kcmc": "药物化学实验（含药物分子设计实验）",
+                "xm": "葛利",
+                "xqj": "1",
+                "jcs": "1-2",
+                "zcd": "1-5周,7-11周(单),12-15周",
+                "cdmc": "医学院实验楼404",
+                "jxbzc": "药学231;药学232"
+              }
+            ]}
+        """.trimIndent()
+        val courses = GxuParser.parseScheduleJson(json)
+        assertEquals(1, courses.size)
+        val c = courses.first()
+        assertEquals("药物化学实验（含药物分子设计实验）", c.name)
+        assertEquals("葛利", c.teacher)
+        assertEquals(1, c.dayOfWeek)
+        assertEquals(1, c.startPeriod)
+        assertEquals(2, c.endPeriod)
+        assertEquals("医学院实验楼404", c.location)
+        // 复杂周次："1-5周,7-11周(单),12-15周" → 全周 + 单周段
+        assertTrue(WeekUtils.contains(c.weeks, 1))
+        assertTrue(WeekUtils.contains(c.weeks, 5))
+        assertTrue(WeekUtils.contains(c.weeks, 7))
+        assertTrue(WeekUtils.contains(c.weeks, 12))
+        assertTrue(WeekUtils.contains(c.weeks, 15))
+        assertTrue("单周段 9 周应无课", !WeekUtils.contains(c.weeks, 10))
+    }
+
+    @Test
+    fun `parses exam with gxu v9 paren time format`() {
+        val exams = GxuParser.parseExamsJson(
+            """
+            {"items":[
+              {"kcmc":"分子生物学(一)","kssj":"2026-07-15(15:00-17:00)","cdmc":"6A-605","ksmc":"期末考试"}
+            ]}
+            """.trimIndent(),
+        )
+        assertEquals(1, exams.size)
+        val e = exams.first()
+        assertEquals("分子生物学(一)", e.name)
+        assertEquals("2026-07-15", e.date)
+        assertEquals("15:00", e.note)
+        assertEquals("6A-605", e.location)
+    }
+
     // ---- 学期推导 ----
 
     @Test

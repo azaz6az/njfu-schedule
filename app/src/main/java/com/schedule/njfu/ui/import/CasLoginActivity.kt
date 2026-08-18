@@ -20,7 +20,7 @@ import com.schedule.njfu.importer.njfu.CasLoginClient
  *
  * 背景：jwxt 反向代理会拒绝非浏览器客户端的 ticket 落地请求（OkHttp/Python/curl 均被 404），
  * 但 WebView 走系统 Chrome 内核可正常登录。登录完成后读取会话 Cookie 回传，
- * 由 [ImportViewModel.autoImportWithCookies] / [ImportViewModel.gxuImportWithCookies] 用 OkHttp 抓取数据。
+ * 由 [ImportViewModel.zfImportWithCookies] / [ImportViewModel.autoImportWithCookies] 用 OkHttp 抓取数据。
  *
  * 支持多学校：通过 intent extra 指定登录页 URL、成功判定前缀与会话 Cookie 标记；
  * 未传 extra 时默认南林行为，与历史版本完全一致。
@@ -42,6 +42,8 @@ class CasLoginActivity : ComponentActivity() {
     private var webView: WebView? = null
     private var timeoutGuard: TimeoutGuard? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+    /** 明文地址转 https 兜底只执行一次，防止加载失败后无限重试 */
+    private var httpsRetryDone = false
 
     /** 登录超时守卫：启动加载后 120 秒未成功则自动结束并提示，防止永久挂起 */
     private inner class TimeoutGuard : Runnable {
@@ -154,6 +156,16 @@ class CasLoginActivity : ComponentActivity() {
             ) {
                 super.onReceivedError(view, errorCode, description, failingUrl)
                 if (done) return
+                // 明文流量被拦（net::ERR_CLEARTEXT_NOT_PERMITTED）兜底：
+                // 个别设备/ROM 的网络安全配置对 http 放行失效，把地址改写为 https 重载一次。
+                // 广西大学等正方系统 http 请求最终也会被服务器重定向到 https，效果一致。
+                if (description?.contains("CLEARTEXT", ignoreCase = true) == true &&
+                    !httpsRetryDone && failingUrl?.startsWith("http://") == true
+                ) {
+                    httpsRetryDone = true
+                    view?.loadUrl(failingUrl.replaceFirst("http://", "https://"))
+                    return
+                }
                 Toast.makeText(
                     this@CasLoginActivity,
                     getString(R.string.cas_login_load_failed, errorCode, description ?: "null"),

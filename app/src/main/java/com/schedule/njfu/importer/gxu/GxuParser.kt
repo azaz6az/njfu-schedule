@@ -29,6 +29,8 @@ object GxuParser {
         val jcs: String = "",
         val zcd: String = "",
         val jxdd: String = "",
+        /** V9 新版实测地点字段（广西大学等） */
+        val cdmc: String = "",
         val jsmc: String = "",
         val xqmc: String = "",
     )
@@ -100,12 +102,16 @@ object GxuParser {
         val name = it.kcmc.trim()
         val kssj = it.kssj.trim()
         if (name.isEmpty() || kssj.isEmpty()) return null
-        // 时间格式："yyyy-MM-dd HH:mm:ss" 或 "yyyy-MM-dd HH:mm"
-        val m = Regex("^(\\d{4}-\\d{2}-\\d{2})\\s+(\\d{2}:\\d{2})").find(kssj) ?: return null
+        // 时间格式（V9 新版/旧版两种）：
+        //   "yyyy-MM-dd HH:mm:ss" / "yyyy-MM-dd HH:mm"（旧版）
+        //   "yyyy-MM-dd(15:00-17:00)"（广西大学 V9 实测）
+        val date = Regex("^\\d{4}-\\d{2}-\\d{2}").find(kssj)?.value?.trim() ?: return null
+        // 开场时间：短横线前第一个 HH:mm（兼容空格分隔与括号两种）
+        val time = Regex("""(?:\s|\()(\d{2}:\d{2})""").find(kssj)?.groupValues?.get(1).orEmpty()
         return Exam(
             name = name,
-            date = m.groupValues[1],
-            note = m.groupValues[2],
+            date = date,
+            note = time,
             location = it.cdmc.trim(),
         )
     }
@@ -129,9 +135,9 @@ object GxuParser {
         return start to end
     }
 
-    /** 校区 + 地点拼接：xqmc 校区、jxdd 地点（退回 jsmc 教室名），去空段、空格分隔 */
+    /** 校区 + 地点拼接：xqmc 校区、jxdd（旧版地点）/ cdmc（V9 新版实测地点）/ jsmc 教室名，去空段、空格分隔 */
     private fun combineLocation(it: KbItem): String {
-        val primary = it.jxdd.trim().ifEmpty { it.jsmc.trim() }
+        val primary = it.jxdd.trim().ifEmpty { it.cdmc.trim() }.ifEmpty { it.jsmc.trim() }
         val segments = buildList {
             if (it.xqmc.trim().isNotEmpty()) add(it.xqmc.trim())
             if (primary.isNotEmpty()) add(primary)

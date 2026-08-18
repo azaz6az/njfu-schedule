@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 拖拽换课（Agent A 专属资源文件）：新文案只能加在本文件，命名必须以 drag_ 开头且全局唯一；
+         禁止修改 strings.xml 或任何其他 strings_*.xml -->
+    <string name="drag_move_title">移动课程</string>
+    <string name="drag_move_message">将「%1$s」移动到 周%2$s %3$d-%4$d节？</string>
+    <string name="drag_move_confirm">移动</string>
+    <string name="drag_move_cancel">取消</string>
+    <string name="drag_move_conflict_title">移动后课程时间冲突</string>
+    <string name="drag_move_conflict_message">「%1$s」移动后将与以下课程时间重叠（同一天同一时段有课）：</string>
+    <string name="drag_move_conflict_item">• %1$s（周%2$s %3$d-%4$d节）</string>
+    <string name="drag_move_conflict_note">确认移动后两门课会在同一格并排显示。</string>
+    <string name="drag_move_conflict_confirm">仍然移动</string>
+    <string name="drag_move_conflict_back">返回</string>
+</resources>

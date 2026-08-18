@@ -28,6 +28,24 @@ import java.time.LocalTime
 import java.time.ZoneId
 
 /**
+ * 调休感知的核心判定（纯函数）：给定课程的「自然发生日期清单」[occurrenceDates] 与
+ * 调休映射 [shifts]，返回其中【实际应响铃】的日期。逐日判定规则（与
+ * [ReminderScheduler.scheduleDay] / [ReminderReceiver] 共用同一语义）：
+ *  - 某次日期被映射为 0 → 当天放假，跳过该日闹钟（不放行任何课程）；
+ *  - 某次日期被映射为 X(1..7) → 当天按「星期 X 的课表」上课：仅当 X == courseDayOfWeek
+ *    时该课程在这天响铃（如周六补周一的课，周六要响周一的课程），否则该日被别的星期顶替；
+ *  - 无映射 → 保持自然周上课逻辑（courseDayOfWeek == 当天自然星期时响铃）。
+ * 不依赖真实时钟与系统状态，便于 JUnit4 单测；返回按输入顺序过滤后的日期。
+ */
+internal fun effectiveClassDates(
+    occurrenceDates: List<LocalDate>,
+    courseDayOfWeek: Int,
+    shifts: Map<LocalDate, Int>,
+): List<LocalDate> = occurrenceDates.filter { date ->
+    HolidayUtils.shiftedDayOfWeek(date, shifts) == courseDayOfWeek
+}
+
+/**
  * 计算某节课程（[startTime] "HH:mm"）减去提前量 [minutesBefore] 分钟的触发 epoch（毫秒）。
  * 用于统一提醒触发时间的计算，便于纯函数单测。
  * @return 触发 epoch 毫秒；返回 null 表示节次时间非法（无法解析或越界）。
@@ -59,14 +77,14 @@ class ReminderReceiver : BroadcastReceiver() {
                 val shifts = HolidayUtils.parseShifts(
                     db.settingsDao().get(SettingsKeys.HOLIDAY_SHIFTS),
                 )
-                val effectiveDay = HolidayUtils.shiftedDayOfWeek(today, shifts)
                 val am = context.getSystemService(AlarmManager::class.java)
 
-                // 校验课程仍存在，且今天确实应上课（调休后应上该课的日子 + 当前周有课）
+                // 校验课程仍存在，且今天确实应上课（经调休映射判定：映射 0 放假不响，
+                // 映射 X 当天按星期 X 的课表响，无映射按自然星期）+ 当前周有课
                 val course = db.courseDao().getAll().map { it.toModel() }
                     .firstOrNull { it.id == courseId }
                 val shouldClass = course != null &&
-                    course.dayOfWeek == effectiveDay &&
+                    effectiveClassDates(listOf(today), course.dayOfWeek, shifts).isNotEmpty() &&
                     WeekUtils.contains(course.weeks, week)
                 if (!shouldClass) {
                     // 课程已删除/日期已过/今天调休不上课：取消本次提醒，不弹通知
@@ -127,11 +145,14 @@ object ReminderScheduler {
         val am = context.getSystemService(AlarmManager::class.java)
         val times = loadPeriodTimes(context)
         val now = System.currentTimeMillis()
-        // 调休：这天按映射星期上课（如周六补周一的课，则提醒周一的课程）；映射为 0 表示放假无课
-        val effectiveDay = HolidayUtils.shiftedDayOfWeek(date, shifts)
-        if (effectiveDay !in 1..7) return
+        // 调休：每门课经 effectiveClassDates 逐日判定是否应响——某日映射为 0（放假）当天全体
+        // 跳过；映射为 X 当天按星期 X 的课表触发（如周六补周一的课，周六要响周一的课程）；
+        // 无映射保持自然周上课逻辑（course.dayOfWeek 对应当天星期几）。
         courses
-            .filter { it.dayOfWeek == effectiveDay && WeekUtils.contains(it.weeks, week) }
+            .filter { course ->
+                WeekUtils.contains(course.weeks, week) &&
+                    effectiveClassDates(listOf(date), course.dayOfWeek, shifts).isNotEmpty()
+            }
             .forEach { course ->
                 val start = WeekUtils.startTimeOf(course.startPeriod, times)
                 if (start.isBlank()) return@forEach

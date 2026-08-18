@@ -1,10 +1,10 @@
-# 南林课程表（kechengbioa）
+# 教务课表（kechengbioa）
 
-Android 课程表 App：自动导入南林 / 广西大学教务课表 + 手动导入兜底，桌面小组件，课前提醒。
+Android 课程表 App：自动导入多所高校教务课表（南林 CAS / 广西大学、广东海洋大学等正方教务）+ 手动导入兜底，桌面小组件，课前提醒。
 
 ## 功能
 
-- **自动导入**：南林（统一身份认证 CAS）与广西大学（正方 jwglxt 新版教务）双学校，WebView 登录 + 会话 Cookie 抓取课表与考试
+- **自动导入**：内置南京林业大学（统一身份认证 CAS）、广西大学、广东海洋大学（正方 jwglxt 新版教务）等学校；所有使用正方教务系统的高校均可用「自定义正方教务」填登录页地址接入，WebView 登录 + 会话 Cookie 抓取课表与考试
 - **手动导入兜底**：JSON / ICS / Excel 三种格式（教务系统改版或遇验证码时使用）
 - **桌面小组件**：今日课程 2×2、下一节课 4×1（实时倒计时）、今日列表 4×2、考试倒计时 2×2、本周网格 4×3，五款可选；3 套主题（莫兰迪/清新/深邃）深浅色自适应；自适应刷新调度
 - **小组件引导**：设置页内置「桌面小组件」区块——通用三步 + 按品牌查看 + 常见问题
@@ -18,6 +18,14 @@ Android 课程表 App：自动导入南林 / 广西大学教务课表 + 手动�
 - **设置**：学期起始日期、节次时间段、提醒提前量、考试提醒、调休映射、JSON 备份导出/导入、小米设备优化引导
 
 ## 版本历史
+
+### v0.6.0（2026-08-16）
+
+- **应用更名**：`南林课程表` → `教务课表`（不再绑定单一学校）
+- **多学校批量适配**：内置新增广东海洋大学（正方 jwglxt 新版教务，系统部署在根路径 `jw.gdou.edu.cn`，2026-08 实测确认）；「自定义正方教务」入口——任何使用正方教学管理信息服务平台的高校，填教务系统登录页地址即可导入（支持 `/jwglxt/xtgl/login_slogin.html` 与根路径 `/xtgl/login_slogin.html` 两种部署），未预置的正方高校（如佛山大学等）也能使用
+- **架构**：`ZfJwglxtConfig`（baseUrl + contextPath）统一正则教务连接配置，`GxuAdapter` 泛化为通用正方适配器（构造参数化），新增正方学校只需在 `School` 枚举加一行；导入页学校选择改用 FlowRow 自动换行，适配多学校
+- **网络**：明文流量全局放行（部分高校正方教务仅提供 http 入口）；manifest 显式 `usesCleartextTraffic`；WebView 遇 `ERR_CLEARTEXT_NOT_PERMITTED` 时自动改写为 https 重载兜底（广西大学等正方服务器会把 http 重定向到 https）
+- **测试**：新增广东海洋大学配置、正方配置 URL 推导、自定义地址解析、根路径部署接口路径等用例
 
 ### v0.5.1（2026-08-16）
 
@@ -96,7 +104,17 @@ Release 签名：本地存在 `key.properties`（gitignored，内容为 `keystor
 - **ICS**：iCal 周重复事件（RRULE 带 BYDAY/COUNT），时间按默认节次表映射
 - **Excel**（xlsx）：表头 + 数据行，列顺序：`课程名,教师,地点,星期(1-7),开始节,结束节,周次`；周次支持 `1-16`、`1,3,5`、`单周`、`双周`
 
-## 南林教务对接说明
+## 学校接入说明
+
+### 正方教务系统（jwglxt 新版，多数学校通用）
+
+- 广西大学（`https://jwxt2018.gxu.edu.cn`，前缀 `/jwglxt`）、广东海洋大学（`https://jw.gdou.edu.cn`，部署在根路径）等大量高校使用同一套「正方教学管理信息服务平台」（zfsoft），登录流程与数据接口结构一致，仅部署域名、路径前缀与接口名不同。
+- **接口实测（2026-08，广西大学完整登录验证）**：课表数据接口为 `GET {base}{ctx}/kbcx/xskbcx_cxXsgrkb.html?gnmkdm=N2151&xnm=&xqm=`（JSON `kbList[]`：kcmc 课程 / xqj 星期 / jcs 节次 / zcd 周次 / cdmc 地点 / xm 教师）；考试接口为 `POST {base}{ctx}/kwgl/kscx_cxXsksxxIndex.html?doType=query&gnmkdm=N358105`（表单 xnm/xqm，JSON `items[]`：kcmc/kssj/cdmc）。旧文档常见的 `xskbcx_cxXsKb` / `kscx_cxXsksxxDg.html` 在新版站点已不存在（404 被误报为会话失效），已按实测修正。
+- **WAF 对策**：广西大学等前置安恒盾阵防火墙（响应含 ADCCookie），对「桌面 UA + 脚本头」的请求会 302 踢回登录页；抓取请求改用与 WebView 登录一致的移动 UA + Sec-Fetch 浏览器头族后实测可稳定通过。
+- 接入方式：`School` 枚举加一个条目（`zfJwglxt = ZfJwglxtConfig(baseUrl, contextPath)`）即完成预置；未预置的正方高校可在导入页选「自定义正方教务」粘贴登录页地址（`{base}{contextPath}/xtgl/login_slogin.html`），自动推导接口前缀。
+- 登录链路：WebView 登录（验证码/滑块在页面内完成）→ 带回 `JSESSIONID` 会话 Cookie → `GxuAdapter` 携 Cookie 按配置抓课表/考试 → `GxuParser` 解析 JSON，学年学期（xnm/xqm 3/12/16）由学期起始日自动推导或手动选择。
+
+### 南林教务对接说明
 
 - **自动导入 = WebView 登录 + Cookie 桥接**：`CasLoginActivity` 用系统 Chrome 内核打开 CAS 登录页，用户完成登录（含验证码）后读取 jwxt 会话 Cookie（`bzb_jsxsd`），`NjfuAdapter.fetchScheduleWithCookies()` 带 Cookie 抓取 `xskb_list.do` 课表页。
   - 原因：实测 jwxt 反向代理会拒绝一切非浏览器客户端的 CAS ticket 落地（OkHttp/curl/httpx 均 404，仅真实浏览器通过），故登录必须走 WebView；带有效会话 Cookie 的普通页面请求则可正常访问。
@@ -109,7 +127,7 @@ Release 签名：本地存在 `key.properties`（gitignored，内容为 `keystor
 
 ```
 app/src/main/java/com/schedule/njfu/
-├── importer/          # SchoolAdapter 接口 / School 枚举 / NjfuAdapter + GxuAdapter（WebView 登录+JSON 课表/考试）/ JSON/ICS/Excel 导入
+├── importer/          # SchoolAdapter 接口 / School 枚举 + ZfJwglxtConfig（通用正方配置）/ NjfuAdapter + 通用 GxuAdapter / JSON/ICS/Excel 导入
 ├── data/              # Room 实体/DAO/仓库/凭据 Keystore 加密
 ├── widget/            # RemoteViews 小组件（2×2 今日 / 4×1 下一节 / 4×2 今日列表 / 2×2 考试 / 4×3 周网格）+ 主题 + 自适应刷新调度
 ├── reminder/          # 课前提醒（AlarmManager + 开机重排）
@@ -121,7 +139,8 @@ app/src/main/java/com/schedule/njfu/
 
 ## 已知限制
 
-- 自动导入的课表页 URL 与接口字段尚未真机验证（南林 `jsxsd/xskb_list.do`、广西大学 `jwglxt/xskbcx_cxXsKb` 与考试接口 `kscx_cxXsksxxDg` 均为标准正方接口假设）
+- 广东海洋大学接口路径按正方 V9 实测形态（`xskbcx_cxXsgrkb` / `kwgl` 考试接口）推导，2026-08 仅确认登录页为正方系统与根路径部署，站点对校外网络限流，课表/考试接口未真机完整验证；如遇「会话失效」提示且站点界面为标准正方 V9，按本文接口章节核对
+- 佛山大学教务系统地址 2026-08 未能从公网确认（旧入口 `100.fosu.edu.cn` 已下线、`jwglxt/jwxt/jwc` 子域无 DNS 记录、官网有动态防护），已通过「自定义正方教务」入口覆盖，待用户提供教务地址即可预置
 - 验证码/滑块场景由用户在 WebView 内手动完成（自动导入失败时走手动导入）
 - 小组件刷新为每日一次（WorkManager）+ 4×1 倒计时分钟级闹钟（仅倒计时窗口内），打开 App 时也会刷新
 - 提醒依赖系统「闹钟与提醒」授权，省电策略可能延迟通知

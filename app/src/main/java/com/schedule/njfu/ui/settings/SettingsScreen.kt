@@ -71,6 +71,7 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
     val examRemindDays by viewModel.examRemindDays.collectAsStateWithLifecycle()
     val username by viewModel.username.collectAsStateWithLifecycle()
     val widgetTheme by viewModel.widgetTheme.collectAsStateWithLifecycle()
+    val rowHeight by viewModel.rowHeight.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -213,6 +214,29 @@ fun SettingsScreen(viewModel: SettingsViewModel) {
                     holidayShifts = viewModel.loadShifts()
                     showHolidayDialog = true
                 }
+            }
+        }
+
+        item { SectionHeader(stringResource(R.string.settings_schedule_display)) }
+        item {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Text(stringResource(R.string.settings_grid_row_height), style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(8.dp))
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    listOf(48, 56, 64).forEachIndexed { index, h ->
+                        SegmentedButton(
+                            selected = rowHeight == h,
+                            onClick = { viewModel.saveRowHeight(h) },
+                            shape = SegmentedButtonDefaults.itemShape(index = index, count = 3),
+                        ) { Text(stringResource(R.string.settings_row_height_value, h)) }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.settings_grid_row_height_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 

@@ -77,6 +77,8 @@ object WeekUtils {
      *  - `1-12(周)`、`3(周)`、`1-2,4-7,9-10,12-13(周)[03-04节]`（正方课表页）
      *  - `1-12([周])[01-02节]`（教务导出 .xls）
      *  - `1-16(单)`、`2-16(双)`、`1-16单周`、`单周`、`双周`
+     *  - 段级单双（正方 V9 实测，如广西大学）：`1-5周,7-11周(单),12-15周`——
+     *    只有带 `(单)` 的段按单周过滤，其余段为全周
      *
      * 解析失败返回 0（调用方决定兜底策略，见 [fixMissingWeeks]）。
      */
@@ -90,29 +92,39 @@ object WeekUtils {
         // 使后续 substringBefore("[") 在错误位置截断。这里用等价正则一次处理成对括号，行为等价且更稳。
         t = t.replace(Regex("[（(]?[【\\[]?周[】\\]]?[）)]?"), "")
         t = t.substringBefore("[")
-        val odd = t.contains("单")
-        val even = t.contains("双")
-        t = t.replace("单周", "").replace("双周", "")
-        t = t.replace(Regex("[（(](单|双)[)）]"), "")
-        t = t.replace(Regex("周\\s*$"), "").trim()
+        // 全局单/双标记：仅用于「纯单双文本」（如 "单周"）的兜底；
+        // 数字段内是否单双以段级标记为准（见下），避免 `1-5周,7-11周(单),12-15周` 被整体误滤
+        val globalOdd = t.contains("单")
+        val globalEven = t.contains("双")
         var mask = 0
-        for (part in t.split(',', '，', '、')) {
-            val p = part.trim()
-            if (p.isEmpty()) continue
-            val range = Regex("^(\\d+)\\s*[-–—~～至到]\\s*(\\d+)$").find(p)
+        for (rawPart in t.split(',', '，', '、')) {
+            var part = rawPart.trim()
+            if (part.isEmpty()) continue
+            val partOdd = part.contains("单")
+            val partEven = part.contains("双")
+            // 去掉段内的单/双标记：先整体移除 (单)/(双) 括号写法，再删裸单/双字，
+            // 避免 "7-11(单)" 去字后残留 "()" 导致区间无法解析
+            part = part.replace(Regex("[（(](单|双)[)）]"), "")
+                .replace("单", "").replace("双", "")
+                .trim()
+            if (part.isEmpty()) continue
+            var seg = 0
+            val range = Regex("^(\\d+)\\s*[-–—~～至到]\\s*(\\d+)$").find(part)
             if (range != null) {
                 val a = range.groupValues[1].toInt().coerceIn(1, MAX_WEEKS)
                 val b = range.groupValues[2].toInt().coerceIn(1, MAX_WEEKS)
-                if (a <= b) mask = mask or maskFor(a, b)
+                if (a <= b) seg = maskFor(a, b)
             } else {
-                p.toIntOrNull()?.takeIf { it in 1..MAX_WEEKS }?.let { mask = mask or maskFor(it) }
+                part.toIntOrNull()?.takeIf { it in 1..MAX_WEEKS }?.let { seg = maskFor(it) }
             }
+            // 段级单双过滤；同段含单又含双视为全周（有意行为：单双并列 = 每周都有课）
+            if (partOdd && !partEven) seg = seg and oddWeeks(1, MAX_WEEKS)
+            if (partEven && !partOdd) seg = seg and evenWeeks(1, MAX_WEEKS)
+            mask = mask or seg
         }
-        if (mask == 0 && (odd || even)) mask = maskFor(1, MAX_WEEKS)
-        // 注意：当文本同时含「单」和「双」时（odd 与 even 都为 true），下面两个 if 都不生效，
-        // 掩码保持「全周」——这是有意行为：单双周并列说明整学期每周都有课。
-        if (odd && !even) mask = mask and oddWeeks(1, MAX_WEEKS)
-        if (even && !odd) mask = mask and evenWeeks(1, MAX_WEEKS)
+        // 无数字化段时的兜底：纯 "单周"/"双周" → 整学期单/双周
+        if (mask == 0 && globalOdd && !globalEven) mask = maskFor(1, MAX_WEEKS) and oddWeeks(1, MAX_WEEKS)
+        if (mask == 0 && globalEven && !globalOdd) mask = maskFor(1, MAX_WEEKS) and evenWeeks(1, MAX_WEEKS)
         return mask
     }
 

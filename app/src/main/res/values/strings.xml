@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">南林课程表</string>
+    <string name="app_name">教务课表</string>
 
     <!-- 星期（与 WidgetData.dayNameRes 的 1..7 对应） -->
     <string name="weekday_mon">一</string>
@@ -83,6 +83,13 @@
     <string name="import_select_semester">请选择学期</string>
     <string name="import_modify">修改</string>
     <string name="import_login_and_import">登录教务系统并导入</string>
+    <string name="import_custom_url_title">自定义正方教务</string>
+    <string name="import_custom_url_label">教务系统登录页地址</string>
+    <string name="import_custom_url_hint">https://学校域名/xtgl/login_slogin.html</string>
+    <string name="import_custom_url_not_set">未设置教务系统地址</string>
+    <string name="import_custom_url_edit">修改地址</string>
+    <string name="import_custom_url_required_hint">请先设置教务系统登录页地址（示例 https://学校域名/xtgl/login_slogin.html）</string>
+    <string name="import_custom_url_error">无法识别该地址，请填写正方教务系统登录页的完整地址</string>
     <string name="import_importing">导入中…</string>
     <string name="import_confirm">确认导入</string>
     <string name="import_confirm_hint">确认后将替换现有课表数据（建议先到设置页导出备份）</string>
@@ -149,6 +156,10 @@
     <string name="settings_shift_empty">暂无调休映射</string>
     <string name="settings_shift_by_week">按周</string>
     <string name="settings_shift_add_mapping">添加映射</string>
+    <string name="settings_schedule_display">课表显示</string>
+    <string name="settings_grid_row_height">每节行高</string>
+    <string name="settings_row_height_value">%1$d</string>
+    <string name="settings_grid_row_height_desc">行高越大，卡片内课程名显示越完整</string>
     <string name="settings_period_times">节次时间段</string>
     <string name="settings_period_times_hint">点击设置</string>
     <string name="settings_period_format_hint">第 %1$d 节</string>

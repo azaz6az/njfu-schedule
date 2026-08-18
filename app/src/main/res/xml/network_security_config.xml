@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  CAS 登录成功后需访问 http://jwxt.njfu.edu.cn/sso.jsp 完成会话建立，
-  Android 9+ 默认禁止明文流量，仅对南林教务相关域名放行。
+  多学校教务接入需要：
+  - CAS 登录成功后访问 http://jwxt.njfu.edu.cn/sso.jsp 完成会话建立（南林）；
+  - 部分高校正方教务系统仅提供 http 明文入口（自定义正方教务接入时可能遇到）。
+  Android 9+ 默认禁止明文流量，base-config 全局放行明文供各校教务系统使用；
+  仍保留南林域名配置以保持历史行为。
 -->
 <network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">jwxt.njfu.edu.cn</domain>
         <domain includeSubdomains="true">uia.njfu.edu.cn</domain>

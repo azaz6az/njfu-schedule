@@ -42,6 +42,9 @@ class ScheduleRepository(
     suspend fun addCourse(course: Course) = db.courseDao().upsert(course.toEntity())
     suspend fun deleteCourse(id: Long) = db.courseDao().deleteById(id)
 
+    /** 更新整门课程（Room 按主键 UPDATE）；长按拖拽换课走这里 */
+    suspend fun updateCourse(course: Course) = db.courseDao().update(course.toEntity())
+
     companion object {
         /** 自动导入去重：name+day+startPeriod 相同视为重复 */
         fun merge(auto: List<Course>, manual: List<Course>): List<Course> {

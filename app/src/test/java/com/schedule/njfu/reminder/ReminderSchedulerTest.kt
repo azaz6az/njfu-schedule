@@ -130,4 +130,82 @@ class ReminderSchedulerTest {
         // 周一的课在当天自然周四是周二… 直接断言有效日非 1..7
         assertTrue(HolidayUtils.shiftedDayOfWeek(date, shifts) !in 1..7)
     }
+
+    // ---- effectiveClassDates（调休感知纯函数，2026-09-14 起为周一） ----
+
+    @Test
+    fun `shift to 0 skips that occurrence（放假跳过）`() {
+        // 三周一的课：第二周周一 09-21 被映射为 0（放假）→ 只响第一、第三周
+        val dates = listOf(
+            LocalDate.of(2026, 9, 14), // 周一
+            LocalDate.of(2026, 9, 21), // 周一，映射为 0（放假）
+            LocalDate.of(2026, 9, 28), // 周一
+        )
+        val shifts = mapOf(LocalDate.of(2026, 9, 21) to 0)
+        assertEquals(
+            listOf(LocalDate.of(2026, 9, 14), LocalDate.of(2026, 9, 28)),
+            effectiveClassDates(dates, courseDayOfWeek = 1, shifts),
+        )
+    }
+
+    @Test
+    fun `substitute day rings the mapped weekday course（周六补周一）`() {
+        // 2026-10-10 是周六（自然星期 6），被映射为 1 → 当天按周一课表上课
+        val sat = LocalDate.of(2026, 10, 10)
+        assertEquals(6, sat.dayOfWeek.value) // 先确认该日确为周六
+        val shifts = mapOf(sat to 1)
+        // 周一课程：在补课周六响铃
+        assertEquals(listOf(sat), effectiveClassDates(listOf(sat), courseDayOfWeek = 1, shifts))
+        // 自然周六课程（星期 6）：当日被周一顶替，不响铃
+        assertTrue(effectiveClassDates(listOf(sat), courseDayOfWeek = 6, shifts).isEmpty())
+    }
+
+    @Test
+    fun `no shift keeps natural weekday ringing（无映射按自然星期）`() {
+        // 2026-09-14（周一）~ 09-20（周日）整周日期；无映射时周三的课只在周三响
+        val week = (0L..6L).map { LocalDate.of(2026, 9, 14).plusDays(it) }
+        assertEquals(
+            listOf(LocalDate.of(2026, 9, 16)), // 周三
+            effectiveClassDates(week, courseDayOfWeek = 3, emptyMap()),
+        )
+    }
+
+    @Test
+    fun `ring dates equal old shiftedDayOfWeek filter（原逻辑不变）`() {
+        // 与旧实现 scheduleDay 的筛选（shifts[date] ?: 自然星期 == dayOfWeek）逐项一致：
+        // 09-21 放假（0）跳过、10-10 补周一的课（1）被纳入响铃清单
+        val dates = listOf(
+            LocalDate.of(2026, 9, 14),  // 周一
+            LocalDate.of(2026, 9, 21),  // 周一 → 映射 0（放假）
+            LocalDate.of(2026, 9, 28),  // 周一
+            LocalDate.of(2026, 10, 10), // 周六 → 映射 1（补周一的课）
+        )
+        val shifts = mapOf(
+            LocalDate.of(2026, 9, 21) to 0,
+            LocalDate.of(2026, 10, 10) to 1,
+        )
+        val expected = dates.filter { HolidayUtils.shiftedDayOfWeek(it, shifts) == 1 }
+        assertEquals(expected, effectiveClassDates(dates, courseDayOfWeek = 1, shifts))
+        // 手算预期：[09-14、09-28、10-10]（09-21 放假剔除）
+        assertEquals(
+            listOf(
+                LocalDate.of(2026, 9, 14),
+                LocalDate.of(2026, 9, 28),
+                LocalDate.of(2026, 10, 10),
+            ),
+            expected,
+        )
+    }
+
+    @Test
+    fun `day off yields no rings for every weekday（放假全天无课）`() {
+        val off = LocalDate.of(2026, 9, 21) // 周一，映射为 0（放假）
+        val shifts = mapOf(off to 0)
+        for (d in 1..7) {
+            assertTrue(
+                "星期 $d 在放假日不应响铃",
+                effectiveClassDates(listOf(off), d, shifts).isEmpty(),
+            )
+        }
+    }
 }

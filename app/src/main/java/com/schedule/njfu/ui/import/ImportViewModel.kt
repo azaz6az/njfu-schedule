@@ -16,6 +16,7 @@ import com.schedule.njfu.importer.JsonImporter
 import com.schedule.njfu.importer.NjfuXlsImporter
 import com.schedule.njfu.importer.gxu.GxuAdapter
 import com.schedule.njfu.importer.njfu.NjfuAdapter
+import com.schedule.njfu.importer.ZfJwglxtConfig
 import com.schedule.njfu.model.Course
 import com.schedule.njfu.model.Exam
 import com.schedule.njfu.model.WeekUtils
@@ -78,17 +79,19 @@ class ImportViewModel(private val db: AppDatabase, private val context: Context)
     }
 
     /**
-     * 广西大学 WebView 登录完成后回传的会话 Cookie → 抓课表 + 考试 JSON → 预览。
+     * 正方 jwglxt 新版教务通用导入：WebView 登录完成后回传的会话 Cookie → 抓课表 + 考试 JSON → 预览。
+     * 广西大学、广东海洋大学及自定义正方教务学校共用此入口（仅教务系统地址不同）。
+     * @param config 正方教务连接配置（baseUrl + contextPath）
      * @param xnm 学年度（如 "2025"），@param xqm 学季代码（3/12/16），由导入向导随学校一起选定。
      */
-    fun gxuImportWithCookies(cookies: String, xnm: String, xqm: String) {
+    fun zfImportWithCookies(cookies: String, config: ZfJwglxtConfig, xnm: String, xqm: String) {
         if (cookies.isBlank()) {
             state.value = UiState.Error(context.getString(R.string.import_error_no_session));
             return
         }
         viewModelScope.launch {
             state.value = UiState.Loading(context.getString(R.string.import_loading_fetching))
-            val adapter = GxuAdapter()
+            val adapter = GxuAdapter(config)
             val result = withContext(Dispatchers.IO) {
                 adapter.fetchScheduleWithCookies(cookies, xnm, xqm)
             }

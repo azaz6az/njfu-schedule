@@ -42,6 +42,7 @@ class SettingsViewModel(private val db: AppDatabase, private val context: Contex
     val examRemindDays = MutableStateFlow(1)
     val username = MutableStateFlow("")
     val widgetTheme = MutableStateFlow(WidgetTheme.DEFAULT_KEY)
+    val rowHeight = MutableStateFlow(SettingsKeys.DEFAULT_ROW_HEIGHT)
 
     private val repo = ScheduleRepository(db)
 
@@ -54,6 +55,9 @@ class SettingsViewModel(private val db: AppDatabase, private val context: Contex
             username.value = CredentialStore(context).load()?.first ?: ""
             widgetTheme.value =
                 db.settingsDao().get(SettingsKeys.WIDGET_THEME) ?: WidgetTheme.DEFAULT_KEY
+            rowHeight.value =
+                db.settingsDao().get(SettingsKeys.ROW_HEIGHT)?.toIntOrNull()
+                    ?: SettingsKeys.DEFAULT_ROW_HEIGHT
         }
     }
 
@@ -135,6 +139,14 @@ class SettingsViewModel(private val db: AppDatabase, private val context: Contex
             NextClassWidgetProvider.refreshAll(context)
             TodayWidgetProvider.refreshAll(context)
             ExamCountdownWidgetProvider.refreshAll(context)
+        }
+    }
+
+    /** 保存课表每节行高（dp）；课表页通过设置流响应式生效 */
+    fun saveRowHeight(height: Int) {
+        viewModelScope.launch {
+            db.settingsDao().put(SettingsEntity(SettingsKeys.ROW_HEIGHT, height.toString()))
+            rowHeight.value = height
         }
     }
 

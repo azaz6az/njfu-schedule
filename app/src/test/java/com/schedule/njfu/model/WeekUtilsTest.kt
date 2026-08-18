@@ -147,6 +147,32 @@ class WeekUtilsTest {
     }
 
     @Test
+    fun `parseWeeksText supports per-segment odd suffixes like gxu v9`() {
+        // 正方 V9 实测（广西大学课表页）："1-5周,7-11周(单),12-15周"
+        // 只有带 (单) 的段按单周过滤，其余段全周
+        val m = WeekUtils.parseWeeksText("1-5周,7-11周(单),12-15周")
+        assertTrue(WeekUtils.contains(m, 1))
+        assertTrue(WeekUtils.contains(m, 5))
+        assertTrue(WeekUtils.contains(m, 7))
+        assertTrue(WeekUtils.contains(m, 9))
+        assertFalse("7-11(单) 的偶数周应无课", WeekUtils.contains(m, 8))
+        assertFalse("7-11(单) 的偶数周应无课", WeekUtils.contains(m, 10))
+        assertTrue("无标记的 12-15 段应为全周", WeekUtils.contains(m, 12))
+        assertTrue(WeekUtils.contains(m, 13))
+        assertTrue(WeekUtils.contains(m, 14))
+        assertTrue(WeekUtils.contains(m, 15))
+    }
+
+    @Test
+    fun `parseWeeksText keeps global suffix behavior for single odd range`() {
+        // 整体单周标记依旧生效
+        val odd = WeekUtils.parseWeeksText("1-16(单)")
+        assertTrue(WeekUtils.contains(odd, 1))
+        assertTrue(WeekUtils.contains(odd, 15))
+        assertFalse(WeekUtils.contains(odd, 16))
+    }
+
+    @Test
     fun `parseWeeksText returns zero for unparseable text`() {
         assertEquals(0, WeekUtils.parseWeeksText(""))
         assertEquals(0, WeekUtils.parseWeeksText("随便写点什么"))

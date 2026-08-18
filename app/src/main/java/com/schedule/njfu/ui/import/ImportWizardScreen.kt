@@ -8,6 +8,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -51,27 +53,45 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.schedule.njfu.R
 import com.schedule.njfu.data.ImportDiff
 import com.schedule.njfu.importer.School
+import com.schedule.njfu.importer.ZfJwglxtConfig
 import com.schedule.njfu.importer.gxu.GxuParser
 import java.time.LocalDate
 
 private const val PREFS_NAME = "prefs"
 private const val KEY_LAST_SCHOOL = "last_school"
+private const val KEY_CUSTOM_JW_URL = "custom_jw_url"
+private const val CUSTOM_MARKER = "__CUSTOM__"
+
+/**
+ * 导入页的学校选择：内置学校（[School] 枚举）或自定义正方教务（用户填登录页 URL）。
+ * 自定义用于覆盖未预置但使用正方 jwglxt 新版教务的高校（如佛山大学等），
+ * 是实现「适配很多学校」的万能兜底。
+ */
+private sealed interface SchoolChoice {
+    data class BuiltIn(val school: School) : SchoolChoice
+
+    data object Custom : SchoolChoice
+}
 
 /** 从 SharedPreferences 读取上次选择的学校；无效值/未存回退南林 */
-private fun schoolFromPrefs(prefs: SharedPreferences): School {
-    val name = prefs.getString(KEY_LAST_SCHOOL, null) ?: return School.NJFU
-    return School.entries.firstOrNull { it.name == name } ?: School.NJFU
+private fun schoolChoiceFromPrefs(prefs: SharedPreferences): SchoolChoice {
+    val name = prefs.getString(KEY_LAST_SCHOOL, null) ?: return SchoolChoice.BuiltIn(School.NJFU)
+    if (name == CUSTOM_MARKER) return SchoolChoice.Custom
+    return SchoolChoice.BuiltIn(School.entries.firstOrNull { it.name == name } ?: School.NJFU)
 }
 
 /** 学校选择的 rememberSaveable Saver：保存时同步写 SharedPreferences */
-private class SchoolPrefsSaver(private val prefs: SharedPreferences) : Saver<School, String> {
-    override fun SaverScope.save(value: School): String {
-        prefs.edit().putString(KEY_LAST_SCHOOL, value.name).apply()
-        return value.name
+private class SchoolChoicePrefsSaver(private val prefs: SharedPreferences) : Saver<SchoolChoice, String> {
+    override fun SaverScope.save(value: SchoolChoice): String {
+        val stored = when (value) {
+            is SchoolChoice.BuiltIn -> value.school.name
+            SchoolChoice.Custom -> CUSTOM_MARKER
+        }
+        prefs.edit().putString(KEY_LAST_SCHOOL, stored).apply()
+        return stored
     }
 
-    override fun restore(value: String): School =
-        School.entries.firstOrNull { it.name == value } ?: School.NJFU
+    override fun restore(value: String): SchoolChoice = schoolChoiceFromPrefs(prefs)
 }
 
 /** 导入差异摘要：新增/删除/变更/不变 + 冲突警告 */
@@ -100,6 +120,7 @@ private fun ImportDiffSummary(diff: ImportDiff) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -112,12 +133,22 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
     var showIcsDialog by remember { mutableStateOf(false) }
 
     // 学校选择：跨配置变更/进程重建由 SharedPreferences 兜底恢复
-    val schoolSaver = remember { SchoolPrefsSaver(prefs) }
-    var selectedSchool by rememberSaveable(stateSaver = schoolSaver) {
-        mutableStateOf(schoolFromPrefs(prefs))
+    val schoolSaver = remember { SchoolChoicePrefsSaver(prefs) }
+    var selectedChoice by rememberSaveable(stateSaver = schoolSaver) {
+        mutableStateOf(schoolChoiceFromPrefs(prefs))
     }
 
-    // 广大学期选择（xnm 学年度 / xqm 学季 3=秋第1、12=春第2、16=夏第3）
+    // 自定义正方教务地址（登录页 URL），保存在 SharedPreferences 供下次使用
+    var customJwUrl by remember { mutableStateOf(prefs.getString(KEY_CUSTOM_JW_URL, null)) }
+    var showCustomUrlDialog by remember { mutableStateOf(false) }
+
+    /** 当前选择的教务配置：内置正方学校取其配置；自定义取用户填写并解析出的配置 */
+    val zfConfig: ZfJwglxtConfig? = when (val c = selectedChoice) {
+        is SchoolChoice.BuiltIn -> c.school.zfJwglxt
+        SchoolChoice.Custom -> customJwUrl?.let { ZfJwglxtConfig.fromLoginUrl(it) }
+    }
+
+    // 正方学校学期选择（xnm 学年度 / xqm 学季 3=秋第1、12=春第2、16=夏第3）
     var xnm by remember { mutableStateOf("") }
     var xqm by remember { mutableStateOf("") }
     var showSemesterDialog by remember { mutableStateOf(false) }
@@ -127,9 +158,11 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val cookies = result.data?.getStringExtra(CasLoginActivity.EXTRA_COOKIES).orEmpty()
-            when (selectedSchool) {
-                School.GXU -> viewModel.gxuImportWithCookies(cookies, xnm, xqm)
-                School.NJFU -> viewModel.autoImportWithCookies(cookies)
+            val cfg = zfConfig
+            if (cfg != null) {
+                viewModel.zfImportWithCookies(cookies, cfg, xnm, xqm)
+            } else {
+                viewModel.autoImportWithCookies(cookies)
             }
         }
     }
@@ -143,9 +176,10 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
         ActivityResultContracts.OpenDocument(),
     ) { uri -> if (uri != null) viewModel.manualNjfuXls(uri) }
 
-    // 选广西大学时按设置里的学期起始日推导学期；未配置/推导失败则强制手动选择
-    LaunchedEffect(selectedSchool) {
-        if (selectedSchool != School.GXU) return@LaunchedEffect
+    // 选正方学校（广西大学/广东海洋大学/自定义）时按设置里的学期起始日推导学期；
+    // 未配置/推导失败则强制手动选择
+    LaunchedEffect(selectedChoice, zfConfig) {
+        if (zfConfig == null) return@LaunchedEffect
         val start = viewModel.configuredSemesterStart()
         val semester = GxuParser.deriveSemester(start)
         if (semester != null) {
@@ -181,14 +215,23 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
             Column(Modifier.padding(16.dp)) {
                 Text(stringResource(R.string.import_auto), style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     School.entries.forEach { school ->
                         FilterChip(
-                            selected = selectedSchool == school,
-                            onClick = { selectedSchool = school },
+                            selected = selectedChoice == SchoolChoice.BuiltIn(school),
+                            onClick = { selectedChoice = SchoolChoice.BuiltIn(school) },
                             label = { Text(school.label) },
                         )
                     }
+                    // 自定义正方教务：未预置的正方学校（如佛山大学）填登录页地址即可导入
+                    FilterChip(
+                        selected = selectedChoice == SchoolChoice.Custom,
+                        onClick = {
+                            selectedChoice = SchoolChoice.Custom
+                            if (customJwUrl.isNullOrBlank()) showCustomUrlDialog = true
+                        },
+                        label = { Text(stringResource(R.string.import_custom_url_title)) },
+                    )
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -196,7 +239,7 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (selectedSchool == School.GXU) {
+                if (zfConfig != null) {
                     Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         val label = if (xnm.isNotEmpty() && xqm.isNotEmpty()) {
@@ -208,32 +251,75 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
                         Spacer(Modifier.width(8.dp))
                         TextButton(onClick = { showSemesterDialog = true }) { Text(stringResource(R.string.import_modify)) }
                     }
+                    if (selectedChoice == SchoolChoice.Custom) {
+                        Spacer(Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                if (customJwUrl.isNullOrBlank()) stringResource(R.string.import_custom_url_not_set)
+                                else customJwUrl!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(onClick = { showCustomUrlDialog = true }) {
+                                Text(stringResource(R.string.import_custom_url_edit))
+                            }
+                        }
+                        if (customJwUrl.isNullOrBlank() || ZfJwglxtConfig.fromLoginUrl(customJwUrl!!) == null) {
+                            Text(
+                                stringResource(R.string.import_custom_url_required_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
                 }
                 Spacer(Modifier.height(12.dp))
                 Button(
                     onClick = {
+                        val cfg = zfConfig
                         val intent = Intent(context, CasLoginActivity::class.java)
-                        intent.putExtra(CasLoginActivity.EXTRA_START_URL, selectedSchool.loginUrl)
-                        intent.putStringArrayListExtra(
-                            CasLoginActivity.EXTRA_SUCCESS_HOST_PREFIXES,
-                            ArrayList(selectedSchool.successHostPrefixes),
-                        )
-                        intent.putExtra(
-                            CasLoginActivity.EXTRA_SUCCESS_COOKIE_MARKER,
-                            selectedSchool.successCookieMarker,
-                        )
-                        intent.putStringArrayListExtra(
-                            CasLoginActivity.EXTRA_SUCCESS_URL_BLACKLIST,
-                            ArrayList(selectedSchool.successUrlBlacklist),
-                        )
-                        // 空串 = 系统默认移动 UA（广西大学手机版登录页）；南林传桌面 UA
-                        intent.putExtra(
-                            CasLoginActivity.EXTRA_USER_AGENT,
-                            selectedSchool.userAgent ?: "",
-                        )
+                        if (cfg != null) {
+                            // 正方 jwglxt：登录页/成功判定/会话标记/UA 全部由配置推导
+                            intent.putExtra(CasLoginActivity.EXTRA_START_URL, cfg.loginUrl)
+                            intent.putStringArrayListExtra(
+                                CasLoginActivity.EXTRA_SUCCESS_HOST_PREFIXES,
+                                arrayListOf(cfg.baseUrl),
+                            )
+                            intent.putExtra(CasLoginActivity.EXTRA_SUCCESS_COOKIE_MARKER, "JSESSIONID")
+                            intent.putStringArrayListExtra(
+                                CasLoginActivity.EXTRA_SUCCESS_URL_BLACKLIST,
+                                arrayListOf("login_slogin"),
+                            )
+                            // 空串 = 系统默认移动 UA（正方 jwglxt 手机版自适应登录页）
+                            intent.putExtra(CasLoginActivity.EXTRA_USER_AGENT, "")
+                        } else {
+                            val school = (selectedChoice as SchoolChoice.BuiltIn).school
+                            intent.putExtra(CasLoginActivity.EXTRA_START_URL, school.loginUrl)
+                            intent.putStringArrayListExtra(
+                                CasLoginActivity.EXTRA_SUCCESS_HOST_PREFIXES,
+                                ArrayList(school.successHostPrefixes),
+                            )
+                            intent.putExtra(
+                                CasLoginActivity.EXTRA_SUCCESS_COOKIE_MARKER,
+                                school.successCookieMarker,
+                            )
+                            intent.putStringArrayListExtra(
+                                CasLoginActivity.EXTRA_SUCCESS_URL_BLACKLIST,
+                                ArrayList(school.successUrlBlacklist),
+                            )
+                            // 空串 = 系统默认移动 UA；南林 CAS 走桌面 UA（由学校枚举指定）
+                            intent.putExtra(
+                                CasLoginActivity.EXTRA_USER_AGENT,
+                                school.userAgent ?: "",
+                            )
+                        }
                         casLauncher.launch(intent)
                     },
-                    enabled = !loading && (selectedSchool != School.GXU || (xnm.isNotEmpty() && xqm.isNotEmpty())),
+                    enabled = !loading
+                        && (zfConfig == null || (xnm.isNotEmpty() && xqm.isNotEmpty()))
+                        && (selectedChoice is SchoolChoice.BuiltIn || zfConfig != null),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(50),
                 ) { Text(stringResource(R.string.import_login_and_import)) }
@@ -370,6 +456,20 @@ fun ImportWizardScreen(viewModel: ImportViewModel, onDone: () -> Unit = {}) {
         }
     }
 
+    if (showCustomUrlDialog) {
+        CustomJwUrlDialog(
+            current = customJwUrl.orEmpty(),
+            onConfirm = { text ->
+                val trimmed = text.trim()
+                if (ZfJwglxtConfig.fromLoginUrl(trimmed) != null) {
+                    customJwUrl = trimmed
+                    prefs.edit().putString(KEY_CUSTOM_JW_URL, trimmed).apply()
+                    showCustomUrlDialog = false
+                }
+            },
+            onDismiss = { showCustomUrlDialog = false },
+        )
+    }
     if (showSemesterDialog) {
         SemesterDialog(
             currentXnm = xnm,
@@ -478,6 +578,54 @@ private fun SemesterDialog(
             TextButton(onClick = { onConfirm(year, xqm) }) { Text(stringResource(R.string.action_confirm)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+    )
+}
+
+/**
+ * 自定义正方教务学校：用户粘贴教务系统登录页地址（教学管理信息服务平台，
+ * 支持 /jwglxt/xtgl/login_slogin.html 或根路径 /xtgl/login_slogin.html 两种部署）。
+ * 确认前本地校验格式，校验通过才保存，避免无效地址进入登录流程。
+ */
+@Composable
+private fun CustomJwUrlDialog(
+    current: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var text by remember { mutableStateOf(current) }
+    val valid = ZfJwglxtConfig.fromLoginUrl(text.trim()) != null
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.import_custom_url_title)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text(stringResource(R.string.import_custom_url_label)) },
+                    placeholder = { Text(stringResource(R.string.import_custom_url_hint)) },
+                    minLines = 2,
+                    singleLine = false,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (text.isNotBlank() && !valid) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        stringResource(R.string.import_custom_url_error),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(text) }, enabled = valid) {
+                Text(stringResource(R.string.action_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
     )
 }
 

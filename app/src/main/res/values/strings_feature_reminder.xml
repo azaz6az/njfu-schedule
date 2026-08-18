@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 考前/上课提醒调休增强（Agent D 专属资源文件）：新文案只能加在本文件，命名必须以 reminder_ 开头且全局唯一；
+         禁止修改 strings.xml 或任何其他 strings_*.xml -->
+</resources>

@@ -16,8 +16,8 @@ android {
         applicationId = "com.schedule.njfu"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.5.1"
+        versionCode = 10
+        versionName = "0.6.0"
     }
     // 先从 key.properties（gitignored）读取签名配置；文件存在才创建 release 签名
     signingConfigs {
